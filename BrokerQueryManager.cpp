@@ -23,14 +23,14 @@ BrokerQueryManager::BrokerQueryManager(broker::endpoint* lhost,
     this->ptlocalhost = lhost;
     //pointer to message queue object
     this->ptmq = mq;
-    getlogin_r(this->username,1024);
+    getlogin_r(this->username,SIZE);
 }
 
 bool BrokerQueryManager::getQueriesFromBrokerMessage(pollfd* pfd,
         bool &connected)
 {
     // poll message queue
-    int rv = poll(pfd,1,2000);
+    int rv = poll(pfd,1,PTIME);
     // if pooling response is not of time out or queue is empty
     if(!(rv== -1) && !(rv==0))
     {
@@ -114,6 +114,7 @@ bool BrokerQueryManager::queryDataResultVectorInit()
     { 
         query_update temp;
         temp.current_results = getQueryResult(in_query_vector[i].query);
+		//check if the initial dump is demanded
         if(in_query_vector[i].flag)
         {
             std::string init = "INIT_DUMP";
@@ -122,6 +123,7 @@ bool BrokerQueryManager::queryDataResultVectorInit()
         }
         temp.old_results = temp.current_results;
         temp.current_results.clear();
+		//wait 1sec to load the new state of table
         usleep(1000000);
         temp.current_results = getQueryResult(in_query_vector[i].query);
         out_query_vector.emplace_back(temp);
@@ -133,7 +135,7 @@ bool BrokerQueryManager::queryDataResultVectorInit()
 
 void BrokerQueryManager::queriesUpdateTrackingHandler()
 {
-    
+    //loop over all received queries
     for(int i=0;i<out_query_vector.size();i++)
     {
         BrokerQueryManager::diffResultsAndEventTriger(i);
@@ -145,8 +147,10 @@ QueryData BrokerQueryManager::getQueryResult(const std::string& queryString)
 {
     QueryData qd;
     Status status = osquery::queryExternal(queryString, qd);
+	//if error in executing sql query
     if(!status.ok())
     {
+	//send error to bro-side
         sendErrortoBro(status.what());
     }
     return qd;
@@ -191,9 +195,13 @@ void BrokerQueryManager::sendUpdateEventToMaster(const QueryData& temp,
     {
         if(!qmap.empty() && !handle->gotExitSignal())
         {
+			//1- event name
             msg.emplace_back(in_query_vector[iterator].event_name);
+			//2- local system ipv4
             msg.push_back(getLocalHostIp());
+			//3- username
             msg.push_back(this->username);
+			//4- event type
             msg.push_back(event_type);
             //iterator for no of columns in corresponding query
             for(int i=0;i<qmap[iterator].size() && !handle->gotExitSignal();i++)
@@ -219,7 +227,6 @@ void BrokerQueryManager::sendUpdateEventToMaster(const QueryData& temp,
             //send broker message 
         LOG(WARNING) << msg;
         this->ptlocalhost->send(*b_topic, msg);
-        usleep(500000);
         msg.clear();
         }    
         this->ptmq->want_pop().clear();
@@ -233,11 +240,14 @@ const broker::message& msg)
     
     //returns the event part
     temp.event_name = broker::to_string(msg[0]);
-    //returns the query  string
+    //sql query  string
     temp.query = broker::to_string(msg[1]);
+	//event type
     temp.ev_type = broker::to_string(msg[2]);
+	//convert event type to upper case
     std::transform(temp.ev_type.begin(), temp.ev_type.end(),
             temp.ev_type.begin(), ::toupper);
+	//check initial dump flag
     temp.flag = (broker::to_string(msg[3]) == "1")?true:false;
     
     
@@ -314,6 +324,7 @@ std::string BrokerQueryManager::getLocalHostIp()
 
 void BrokerQueryManager::setSignalHandle(SignalHandler *s_handle)
 {
+	//set the signal handler object
     this->handle = s_handle;
 }
 
@@ -326,8 +337,6 @@ void BrokerQueryManager::sendWarningtoBro(std::string str)
     msg.emplace_back(str);
     //send event in the form of broker message
     ptlocalhost->send(*b_topic,msg);
-    // the delay time to satisfy message reaches its destination
-    usleep(500000);
 }
 
 void BrokerQueryManager::sendErrortoBro(std::string str)
@@ -339,6 +348,4 @@ void BrokerQueryManager::sendErrortoBro(std::string str)
     msg.emplace_back(str);
     //send event in the form of broker message
     ptlocalhost->send(*b_topic,msg);
-    // the delay time to satisfy message reaches its destination
-    usleep(500000);
 }
