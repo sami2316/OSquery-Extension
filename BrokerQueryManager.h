@@ -68,6 +68,10 @@ typedef std::vector<std::string> query_columns;
 // map of query columns; holds query columns for each query
 typedef std::map<int,query_columns> query_columns_map;
 
+//size of array
+const int SIZE=1024;
+//wait time for polling
+const int PTIME = 2000;
 
 /**
  *  @brief Query Manager is responsible for update tracking for given queries
@@ -82,7 +86,7 @@ private:
     //broker topic string pointer
     std::string* b_topic;
     //local machine user name
-    char username[1024];
+    char username[SIZE];
     bool first_time;
     // To store the difference in query results
     DiffResults diff_result;
