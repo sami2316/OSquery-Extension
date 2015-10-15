@@ -69,10 +69,12 @@ bool BrokerConnectionManager::connectToMaster(std::string master_ip,
 {
     LOG(WARNING) <<"Connecting to Master at "<<master_ip ;
     this->connected = false;
+	//peer with master 
     this->peer = ptlocalhost->peer(master_ip,b_port);
-    
+    //loop untill connection is established or kill signal received
     while(!connected && !handler->gotExitSignal())
     {
+		//check connection queue
         auto conn_status = 
         this->ptlocalhost->outgoing_connection_status().want_pop();
         for(auto cs: conn_status)
@@ -154,5 +156,6 @@ BrokerQueryManager* BrokerConnectionManager::getQueryManagerPointer()
 
 void BrokerConnectionManager::closeBrokerConnection()
 {
+	//unpeer form master
     ptlocalhost->unpeer(this->peer);
 }
