@@ -50,7 +50,9 @@ int main(int argc, char* argv[]) {
  //osquery::runner start logging, threads, etc. for our extension
   osquery::Initializer runner(argc, argv, OSQUERY_EXTENSION);
   LOG(WARNING) <<"Initialized OSquery." ;
-  
+  //wait for osqueryd to load
+  usleep(1000000);
+ 
  
   
 //Reads hostName, broker_topic and broker_port form broker.ini file
@@ -65,7 +67,7 @@ if(fileResponse == 0)
         do
         {
             // then make a broker connection manager object
-            ptBCM = new BrokerConnectionManager(fileReader.getHostName(),
+            ptBCM = new BrokerConnectionManager(getLocalHostIp(),
                 fileReader.getBrokerTopic(),
                 std::atoi(fileReader.getBrokerConnectionPort().c_str()));
             
@@ -76,17 +78,18 @@ if(fileResponse == 0)
             connectionResponse = ptBCM->connectToMaster(fileReader.getMasterIp()
                     ,std::chrono::duration<double>
             (std::atoi(fileReader.getRetryInterval().c_str())), signalHandler);
+            ptBCM->getAndSetTopic();
+            
             // When connection is established then process queries
             if (connectionResponse)
             {
-                processResponse = ptBCM->getAndProcessQuery(
-                        fileReader.getBrokerTopic());
+                processResponse = ptBCM->getAndProcessQuery();
                 // if query processing is successful
                 if(processResponse)
                 {   
                     /*then Track changes and send response to master until 
                      *connection is alive and no kill signal is received
-                     */
+                     *////*
                     while(ptBCM->isConnectionAlive() &&
                             !signalHandler->gotExitSignal())
                     {
@@ -104,12 +107,15 @@ if(fileResponse == 0)
                 }
                 else
                 {
+                    ptBCM->getQueryManagerPointer()->sendErrortoBro("No queries"
+                    " sent from Bro-Master");
                     //free resources
                     ptBCM->getQueryManagerPointer()->ReInitializeVectors();
                     //close broker connection
                     ptBCM->closeBrokerConnection();
                     //delete  BrokerConnectionManager Object
                     delete ptBCM;
+                    LOG(WARNING) << "Could not Process Queries";
                 }
             }
             //run until kill signal is received
