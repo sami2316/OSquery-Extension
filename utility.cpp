@@ -136,3 +136,26 @@ std::string FileReader::getRetryInterval()
 /*
  * End of FileReader Class member functions
  */
+
+std::string getLocalHostIp()
+{
+    //map::iterator to iterator over osquery::Row columns
+    typedef std::map<std::string, std::string>::const_reverse_iterator pt;
+    
+    //Using osquery; queries interface_addresses table
+    QueryData ip_table; 
+    osquery::queryExternal("SELECT address FROM interface_addresses",ip_table);
+    // loop over each interface Row
+    for(auto& r: ip_table)
+    {
+        for(pt iter = r.rbegin(); iter != r.rend(); iter++)
+        {
+            if((iter->second).size()>9 && (iter->second).size()<16)
+            {
+                return iter->second;
+            }
+        }
+        std::cout<<std::endl;
+    }
+    return "";
+}
