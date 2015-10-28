@@ -28,7 +28,7 @@ BrokerConnectionManager::BrokerConnectionManager(std::string hostName,
     // pooling for message queue
     ptpfd = new pollfd{this->ptmq->fd(), POLLIN, 0};
     // Query Manager Object
-    this->qm = new BrokerQueryManager(ptlocalhost,ptmq,&btp);
+    this->qm = new BrokerQueryManager(ptlocalhost,ptmq,btp);
 }
 
 BrokerConnectionManager::~BrokerConnectionManager()
@@ -48,7 +48,7 @@ bool BrokerConnectionManager::listenForBrokerConnection()
     LOG(WARNING) <<"listening for new Connection";
     this->connected = false;
     //listen for new connection. wait until at-least one connection is found
-    ptlocalhost->listen(b_port,qm->getLocalHostIp().c_str());
+    ptlocalhost->listen(b_port,getLocalHostIp().c_str());
     //pop new connection request
     auto conn_status = 
     this->ptlocalhost->incoming_connection_status().need_pop();
@@ -69,12 +69,10 @@ bool BrokerConnectionManager::connectToMaster(std::string master_ip,
 {
     LOG(WARNING) <<"Connecting to Master at "<<master_ip ;
     this->connected = false;
-	//peer with master 
     this->peer = ptlocalhost->peer(master_ip,b_port);
-    //loop untill connection is established or kill signal received
+    
     while(!connected && !handler->gotExitSignal())
     {
-		//check connection queue
         auto conn_status = 
         this->ptlocalhost->outgoing_connection_status().want_pop();
         for(auto cs: conn_status)
@@ -90,7 +88,24 @@ bool BrokerConnectionManager::connectToMaster(std::string master_ip,
     return (!handler->gotExitSignal())? true: false;
 }
 
-bool BrokerConnectionManager::getAndProcessQuery(std::string b_topic)
+bool BrokerConnectionManager::getAndSetTopic()
+{
+    //get topic form message queue
+    std::string temp = qm->getBrokerTopic(this->ptpfd,connected);
+    delete this->ptmq;
+    this->ptmq = NULL;
+    this->ptmq = new broker::message_queue(temp,*ptlocalhost);
+    delete this->ptpfd;
+    // pooling for message queue
+    ptpfd = new pollfd{this->ptmq->fd(), POLLIN, 0};
+    delete this->qm;
+    this->qm = NULL;
+    this->qm = new BrokerQueryManager(ptlocalhost,ptmq,temp);
+    
+    qm->sendReadytoBro();
+}
+
+bool BrokerConnectionManager::getAndProcessQuery()
 {
     //get queries form message queue
     bool temp = qm->getQueriesFromBrokerMessage(this->ptpfd,connected);
@@ -105,6 +120,7 @@ bool BrokerConnectionManager::getAndProcessQuery(std::string b_topic)
         //send warning to bro.
         qm->sendWarningtoBro("No SQL query Registered... or"
                 " query was unformated");
+        ptlocalhost->unpeer(this->peer);
         this->connected = false;
         return false;
     }
@@ -156,6 +172,6 @@ BrokerQueryManager* BrokerConnectionManager::getQueryManagerPointer()
 
 void BrokerConnectionManager::closeBrokerConnection()
 {
-	//unpeer form master
     ptlocalhost->unpeer(this->peer);
+	this->connected = false;
 }
