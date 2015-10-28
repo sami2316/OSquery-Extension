@@ -83,8 +83,8 @@ const int PTIME = 2000;
 class BrokerQueryManager
 {
 private:
-    //broker topic string pointer
-    std::string* b_topic;
+    //broker topic string 
+    std::string b_topic;
     //local machine user name
     char username[SIZE];
     bool first_time;
@@ -116,18 +116,21 @@ public:
      * 
      * @param lhost A pointer to local host passed form BrokerConnectionManager
      * @param mq A pointer to message queue used for reading broker messages
-     * @param btp Pointer to broker topic read from file
+     * @param btp  broker topic read from file
      * 
      */ 
     BrokerQueryManager(broker::endpoint* lhost,
             broker::message_queue* mq,
-            std::string* btp);
+            std::string btp);
     
     /**    
      *  @brief Extracts queries form Broker messages 
      * 
      *  Reads broker queue to extract broker message in event format and then 
      *  extracts SQL query from broker message.
+     *  
+     *  @param pointer to polling object
+     *  @param flag to check connection state.
      * 
      *  @return returns true if extraction is successful. 
      */
@@ -236,17 +239,9 @@ public:
     bool ReInitializeVectors();
              
     
-    /**    
-     *  @brief Returns local host IP 
-     * 
-     * Extracts local interface IPv4 using osquery::query interface
-     * 
-     *  @return the local host IP in std::string form
-     */
-    std::string getLocalHostIp();
-    
     /**
      *  @brief returns the pointer to signalHandler object
+     *  @param s_handle pointer to signal handler 
      */
     void setSignalHandle(SignalHandler *s_handle);
     
@@ -260,11 +255,32 @@ public:
     
     /**
      * @brief send errors to bro-side
-     * This function is responsible for sending error events to bro side
+     * This function is responsible for sending error events to bro-side
      * 
      * @param str error message 
      */
     void sendErrortoBro(std::string str);
+    
+    /**
+     * @brief Extracts the broker topic form broker message (group topic).
+     * Initially extension listens on default topic and then receives topic 
+     * (to make group) in first broker message and continues to listen for
+     *  broker messages on that topic. 
+     * 
+     *  @param pfd pointer to polling object
+     *  @param connected flag to check connection state.
+     * 
+     *  @return returns broker topic for group establishment 
+     */
+    std::string getBrokerTopic(pollfd* pfd, bool &connected);
+    
+    /**
+     * @brief send errors to bro-side
+     *  Sends ready event to bro side as an ACK message so that bro-side start
+     *  sending SQL queries
+     * 
+     */
+    void sendReadytoBro();
 };
 
 
