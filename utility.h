@@ -135,3 +135,12 @@ public:
      */
     std::string getRetryInterval();
 };
+
+/**    
+     *  @brief Returns local host IP 
+     * 
+     * Extracts local interface IPv4 using osquery::query interface
+     * 
+     *  @return the local host IP in std::string form
+     */
+    std::string getLocalHostIp();
