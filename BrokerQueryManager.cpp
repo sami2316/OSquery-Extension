@@ -10,11 +10,11 @@
  */
 
 #include "BrokerQueryManager.h"
-
+#include "utility.h"
 
     
 BrokerQueryManager::BrokerQueryManager(broker::endpoint* lhost,
-        broker::message_queue* mq,std::string* btp)
+        broker::message_queue* mq,std::string btp)
 {
     //point to broker topic object
     this->b_topic = btp;
@@ -29,8 +29,11 @@ BrokerQueryManager::BrokerQueryManager(broker::endpoint* lhost,
 bool BrokerQueryManager::getQueriesFromBrokerMessage(pollfd* pfd,
         bool &connected)
 {
+    //clear all noisy messages
+    this->ptmq->need_pop().clear();
     // poll message queue
     int rv = poll(pfd,1,PTIME);
+
     // if pooling response is not of time out or queue is empty
     if(!(rv== -1) && !(rv==0))
     {
@@ -46,12 +49,6 @@ bool BrokerQueryManager::getQueriesFromBrokerMessage(pollfd* pfd,
             catch(std::string e)
             {
             LOG(WARNING) <<e ;
-            LOG(WARNING) <<"Disconnecting Connection";
-            // re-initialize all vectors
-            BrokerQueryManager::ReInitializeVectors();
-            //set connection flag to false
-            connected = false;
-            return false;
             }
             if(!in_query_vector.empty())
             {
@@ -114,7 +111,6 @@ bool BrokerQueryManager::queryDataResultVectorInit()
     { 
         query_update temp;
         temp.current_results = getQueryResult(in_query_vector[i].query);
-		//check if the initial dump is demanded
         if(in_query_vector[i].flag)
         {
             std::string init = "INIT_DUMP";
@@ -123,7 +119,7 @@ bool BrokerQueryManager::queryDataResultVectorInit()
         }
         temp.old_results = temp.current_results;
         temp.current_results.clear();
-		//wait 1sec to load the new state of table
+        // 1sec delay 
         usleep(1000000);
         temp.current_results = getQueryResult(in_query_vector[i].query);
         out_query_vector.emplace_back(temp);
@@ -135,7 +131,7 @@ bool BrokerQueryManager::queryDataResultVectorInit()
 
 void BrokerQueryManager::queriesUpdateTrackingHandler()
 {
-    //loop over all received queries
+    
     for(int i=0;i<out_query_vector.size();i++)
     {
         BrokerQueryManager::diffResultsAndEventTriger(i);
@@ -147,10 +143,8 @@ QueryData BrokerQueryManager::getQueryResult(const std::string& queryString)
 {
     QueryData qd;
     Status status = osquery::queryExternal(queryString, qd);
-	//if error in executing sql query
     if(!status.ok())
     {
-	//send error to bro-side
         sendErrortoBro(status.what());
     }
     return qd;
@@ -195,13 +189,9 @@ void BrokerQueryManager::sendUpdateEventToMaster(const QueryData& temp,
     {
         if(!qmap.empty() && !handle->gotExitSignal())
         {
-			//1- event name
             msg.emplace_back(in_query_vector[iterator].event_name);
-			//2- local system ipv4
-            msg.push_back(getLocalHostIp());
-			//3- username
+            msg.push_back(ptlocalhost->name());
             msg.push_back(this->username);
-			//4- event type
             msg.push_back(event_type);
             //iterator for no of columns in corresponding query
             for(int i=0;i<qmap[iterator].size() && !handle->gotExitSignal();i++)
@@ -226,7 +216,7 @@ void BrokerQueryManager::sendUpdateEventToMaster(const QueryData& temp,
             }
             //send broker message 
         LOG(WARNING) << msg;
-        this->ptlocalhost->send(*b_topic, msg);
+        this->ptlocalhost->send(b_topic, msg);
         msg.clear();
         }    
         this->ptmq->want_pop().clear();
@@ -237,27 +227,28 @@ input_query BrokerQueryManager::brokerMessageExtractor(
 const broker::message& msg)
 {
     input_query temp;
-    
-    //returns the event part
-    temp.event_name = broker::to_string(msg[0]);
-    //sql query  string
-    temp.query = broker::to_string(msg[1]);
-	//event type
-    temp.ev_type = broker::to_string(msg[2]);
-	//convert event type to upper case
-    std::transform(temp.ev_type.begin(), temp.ev_type.end(),
-            temp.ev_type.begin(), ::toupper);
-	//check initial dump flag
-    temp.flag = (broker::to_string(msg[3]) == "1")?true:false;
-    
-    
-    //will throw an exception if query is not a proper SQL string
-    if(temp.query.substr(0,6)!= "SELECT")
-    {  
-        throw(std::string("Please send Proper formated query"));
+    if( msg.size() >= 4 )
+    {
+        //returns the event part
+        temp.event_name = broker::to_string(msg[0]);
+        //returns the query  string
+        temp.query = broker::to_string(msg[1]);
+        temp.ev_type = broker::to_string(msg[2]);
+        std::transform(temp.ev_type.begin(), temp.ev_type.end(),
+                temp.ev_type.begin(), ::toupper);
+        temp.flag = (broker::to_string(msg[3]) == "1")?true:false;
+
+
+        //will throw an exception if query is not a proper SQL string
+        if(temp.query.substr(0,6)!= "SELECT")
+        {  
+            throw(std::string("Please send Proper formated query"));
+        }
+        else
+            return temp;
     }
     else
-        return temp;
+        throw(std::string("No of arguments missing"));
 }
 
 
@@ -299,32 +290,9 @@ bool BrokerQueryManager::isQueryColumnInteger(const std::string& str)
     return std::all_of(str.begin(),str.end(), ::isdigit);
 }
 
-std::string BrokerQueryManager::getLocalHostIp()
-{
-    //map::iterator to iterator over osquery::Row columns
-    typedef std::map<std::string, std::string>::const_reverse_iterator pt;
-    
-    //Using osquery; queries interface_addresses table
-    QueryData ip_table = 
-            getQueryResult("SELECT address FROM interface_addresses");
-    // loop over each interface Row
-    for(auto& r: ip_table)
-    {
-        for(pt iter = r.rbegin(); iter != r.rend(); iter++)
-        {
-            if((iter->second).size()>9 && (iter->second).size()<16)
-            {
-                return iter->second;
-            }
-        }
-        std::cout<<std::endl;
-    }
-    return "";
-}
 
 void BrokerQueryManager::setSignalHandle(SignalHandler *s_handle)
 {
-	//set the signal handler object
     this->handle = s_handle;
 }
 
@@ -336,7 +304,7 @@ void BrokerQueryManager::sendWarningtoBro(std::string str)
     //warning message
     msg.emplace_back(str);
     //send event in the form of broker message
-    ptlocalhost->send(*b_topic,msg);
+    ptlocalhost->send(b_topic,msg);
 }
 
 void BrokerQueryManager::sendErrortoBro(std::string str)
@@ -347,5 +315,33 @@ void BrokerQueryManager::sendErrortoBro(std::string str)
     //error message
     msg.emplace_back(str);
     //send event in the form of broker message
-    ptlocalhost->send(*b_topic,msg);
+    ptlocalhost->send(b_topic,msg);
+}
+
+void BrokerQueryManager::sendReadytoBro()
+{
+    broker::message msg;
+    //push event name, mapped at bro-side
+    msg.emplace_back("osquery::ready");
+    //error message
+    msg.emplace_back(ptlocalhost->name());
+    //send event in the form of broker message
+    ptlocalhost->send(b_topic,msg);    
+}
+
+    
+std::string BrokerQueryManager::getBrokerTopic(pollfd* pfd, bool &connected)
+{
+    // poll message queue
+    int rv = poll(pfd,1,-1);
+    // if pooling response is not of time out or queue is empty
+    if(!(rv== -1) && !(rv==0))
+    {
+        //loop for all messages in queue
+        for(auto& msg : this->ptmq->need_pop())
+        {
+            LOG(WARNING) << "Group Topic: " <<broker::to_string(msg[0]);
+            return broker::to_string(msg[0]);
+        }
+    }
 }
