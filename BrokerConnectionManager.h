@@ -82,12 +82,10 @@ public:
      *  event name and  query string. Processes each query to corresponding
      *  query columns that will be used to map query columns with event
      *  arguments at the update event generation time.
-     * 
-     *  @param b_topic broker topic; is used to send error message to bro
-     * 
+     *  
      *  @return Returns ture if there is successful get and extraction.
      */ 
-    bool getAndProcessQuery(std::string b_topic);
+    bool getAndProcessQuery();
     
     /**
      *  @brief When connection is established and queries are processed then
@@ -124,6 +122,13 @@ public:
      * 
      */
     void closeBrokerConnection();
+    
+    /**
+     *  @brief gets broker topic from broker message and sets
+     *  broker::message_queue to listen new topic. 
+     */
+    bool getAndSetTopic();
+    
 };
 
 
