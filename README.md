@@ -5,7 +5,7 @@ linux: CENTOS7 (3.10.0-229.11.1.el7.x86_64)
 
 Note: actor framework version should be the same at both sides (bro and osquery side)
 
-```singlequerysubscription.bro ``` , ```multiplequerysubscription.bro``` and ```loggingevents.bro``` are the sample script files; which are in https://github.com/sami2316/bro/tree/master/application directory.
+```group.bro``` and ```loggingevents.bro``` are the sample script files; which are in https://github.com/sami2316/bro/tree/master/application directory.
 
 -------------------------------------------------------
 ###Step 1: Follow Osquery Extension Guidelines###
@@ -98,24 +98,40 @@ redef osquery::endpoint_name = "Printer";
 
 global usb_devices: event(host: string, user: string, ev_type: string, usb_address: int, vendor: string, model: string);
 
+global gtable: table[string] of string;
+
+###################################################################################
+global ready: event(peer_name: string);
+
+
 event bro_init()
 {
 	osquery::enable();
 	osquery::subscribe_to_events("/bro/event/");
 	osquery::listen(broker_port,"192.168.0.120"); 
+	gtable["192.168.1.211"] = "/bro/event/group1";
 }
 
 event BrokerComm::incoming_connection_established(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_establisted",  peer_name;
 	
-	#if we are interested in new usb_devices then
-	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","ADD");
-	#if we are interested in removed usb_devices then
-	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","REMOVED");
-	#if you want an initial dump for the requrest query then set inidumpflag to True
-	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","Removed",T);
+	if (peer_name in gtable)
+		osquery::print("/bro/event/",gtable[peer_name]);
+	else
+		osquery::print("/bro/event/", "/bro/event/default");
 
+}
+
+event ready(peer_name: string)
+{
+	print fmt("Sending queries at Peer =  %s ", peer_name);
+	#if we are interested in new usb_devices then
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group1");
+	#if we are interested in removed usb_devices then
+	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM 	usb_devices","/bro/event/group1","REMOVED");
+	#if you want an initial dump for the requrest query then set inidumpflag to True
+	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group1","Removed",T);
 }
 
 event BrokerComm::incoming_connection_broken(peer_name: string)
@@ -131,7 +147,8 @@ event usb_devices(host: string, user: string, ev_type: string, usb_address: int,
  	print fmt("Host = %s user=%s Event_type= %s Usb_address = %d Vendor = %s Model = %s",host, user, ev_type, usb_address, vendor, model);
 }
 ```
-Please refer to singlequerysubscription.bro to write scripts to monitor other events.
+Note: First three arguments of subscribe are necessary, becareful to write them properly. Third argument is topic to register and join a group. With it querying will be useless. 
+Please refer to group.bro to write scripts to monitor other events.
 
 ####3.2 Scenario 2: A master to a single remote host monitoring with multiple queries subscription####
 An example script for multiple queries subscription, extracted from multiplequerysubscription.bro,
@@ -152,6 +169,9 @@ global arp_cache: event(host: string, user: string, ev_type: string, address: st
 ###################################################################################
 global block_devices: event(host: string, user: string, ev_type: string,name: string,vendor: string, model: string);
 
+###################################################################################
+global gtable: table[string] of string;
+global ready: event(peer_name: string);
 global query: table[string] of string;
 
 event bro_init()
@@ -159,7 +179,8 @@ event bro_init()
 	osquery::enable();
 	osquery::subscribe_to_events("/bro/event/");
 	osquery::listen(broker_port,"192.168.0.120");
-	
+	gtable["192.168.1.211"] = "/bro/event/group1";
+
 	query["osquery::acpi_tables"] = "SELECT name,size,md5 FROM acpi_tables";
 
 	#######################################################################################
@@ -173,13 +194,23 @@ event BrokerComm::incoming_connection_established(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_establisted",  peer_name;
 	
-	#if we are interested in new events
-	osquery::groupsubscribe("/bro/event/",query,"ADD");
-	#if we are interested in removed events
-	osquery::groupsubscribe("/bro/event/",query,"REMOVED");
-	#if we are interested in initial dump as well
-	osquery::groupsubscribe("/bro/event/",query,"ADD",T);
+	if (peer_name in gtable)
+		osquery::print("/bro/event/",gtable[peer_name]);
+	else
+		osquery::print("/bro/event/", "/bro/event/default");
 	
+}
+
+event ready(peer_name: string)
+{
+	print fmt("Sending queries at Peer =  %s ", peer_name);
+	
+	#if we are interested in new events
+	osquery::groupsubscribe("/bro/event/group1",query,"ADD");
+	#if we are interested in removed events
+	osquery::groupsubscribe("/bro/event/group1",query,"REMOVED");
+	#if we are interested in initial dump as well
+	osquery::groupsubscribe("/bro/event/group1",query,"ADD",T);
 }
 
 event BrokerComm::incoming_connection_broken(peer_name: string)
@@ -210,8 +241,7 @@ event block_devices(host: string, user: string, ev_type: string, name: string,ve
 	print fmt("Host = %s user=%s Event_type= %s Name = %s Vendor = %s Model = %s",host, user, ev_type, name, vendor, model);
 }
 ```
-Please refer to multiplequerysubscription.bro to have a look at the scripts written to monitor other
-events.
+
 
 ####3.3 Scenario 3: A master to a remote group of hosts monitoring with a single query subscription####
 Make sure the broker.ini at each osquery host in a group has the same broker_topic. In our example, we are using 
@@ -228,32 +258,44 @@ redef osquery::endpoint_name = "Printer";
 
 
 global usb_devices: event(host: string, user: string, ev_type: string, usb_address: int, vendor: string, model: string);
+global gtable: table[string] of string;
+
+global ready: event(peer_name: string);
+
 
 event bro_init()
 {
 	osquery::enable();
 	osquery::subscribe_to_events("/bro/event/");
 	osquery::listen(broker_port,"192.168.0.120"); 
+	##mapping of IP against group topics....
+	gtable["192.168.1.211"] = "/bro/event/group1";
+	gtable["192.168.1.33"] = "/bro/event/group2"; 
 }
 
 event BrokerComm::incoming_connection_established(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_establisted",  peer_name;
 	
-	#if we are interested in new usb_devices then
-	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","ADD");
-	#if we are interested in removed usb_devices then
-	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","REMOVED");
-	#if you want an initial dump for the requrest query then set inidumpflag to True
-	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","Removed",F,"/bro/event/group1");
-	##"bro/event/group1" is the topic mapped to group. 
+	if (peer_name in gtable)
+		osquery::print("/bro/event/",gtable[peer_name]);
+	else
+		osquery::print("/bro/event/", "/bro/event/default");
+
+}
+
+event ready(peer_name: string)
+{
+	print fmt("Sending queries at Peer =  %s ", peer_name);
+	#if we are interested to send single event to multiple hosts 
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group1");
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group2");
 
 }
 
 event BrokerComm::incoming_connection_broken(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_broken", peer_name;
-
 }
 
 ############################# USB DEVICES ###################################################
@@ -263,22 +305,10 @@ event usb_devices(host: string, user: string, ev_type: string, usb_address: int,
  	print fmt("Host = %s user=%s Event_type= %s Usb_address = %d Vendor = %s Model = %s",host, user, ev_type, usb_address, vendor, model);
 }
 ```
-For multiple groups, you need to change the broker.ini at each osquery host to make it a part of specific group. For example, if there are three hosts and we wana make three groups, simply update broker.ini on each host with different 
-broker_topic "/bro/event/group1", "/bro/event/group2", "/bro/event/group3" respectively.
+For multiple groups, you need to add entries in ```gtable``` and then in the ```ready``` event subscribe queries with the group topic. A host can be only in a single group.
 Then subscribe different queries on each host in BrokerComm::outgoing_connection_established event body.
 
-```
-event BrokerComm::outgoing_connection_established(peer_address: string, peer_port: port, peer_name: string)
-{
-	print "BrokerComm::outgoing_connection_establisted", 	peer_address, 
-        peer_port, peer_name;
 
-		#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","Removed",F,"/bro/event/group1");
-		#osquery::subscribe(users,"SELECT usb_address,vendor,model FROM usb_devices","Removed",F,"/bro/event/group2");
-		#osquery::subscribe(last,"SELECT usb_address,vendor,model FROM usb_devices","Removed",F,"/bro/event/group3");
-
-}
-```
 ####3.4 Scenario 4: A master to a remote group of hosts monitoring with multiple queries subscription####
 Make sure the broker.ini at each osquery host in a group has the same broker_topic. In our example, we are using 
 "broker_topic=/bro/event/group1"
@@ -300,6 +330,9 @@ global arp_cache: event(host: string, user: string, ev_type: string, address: st
 ###################################################################################
 global block_devices: event(host: string, user: string, ev_type: string,name: string,vendor: string, model: string);
 
+###################################################################################
+global gtable: table[string] of string;
+global ready: event(peer_name: string);
 global query: table[string] of string;
 
 event bro_init()
@@ -307,11 +340,14 @@ event bro_init()
 	osquery::enable();
 	osquery::subscribe_to_events("/bro/event/");
 	osquery::listen(broker_port,"192.168.0.120");
-	
+	gtable["192.168.1.211"] = "/bro/event/group1";
+	gtable["192.168.1.33"] = "/bro/event/group2"; 
+
+
 	query["osquery::acpi_tables"] = "SELECT name,size,md5 FROM acpi_tables";
 
 	#######################################################################################
-	query["osquery::arp_cache"] = "SELECT address,mac,interface FROM arp_cache";
+	#query["osquery::arp_cache"] = "SELECT address,mac,interface FROM arp_cache";
 
 	#######################################################################################
 	#query["osquery::block_devices"] =  "SELECT name,vendor,model FROM block_devices";
@@ -321,19 +357,25 @@ event BrokerComm::incoming_connection_established(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_establisted",  peer_name;
 	
+	if (peer_name in gtable)
+		osquery::print("/bro/event/",gtable[peer_name]);
+	else
+		osquery::print("/bro/event/", "/bro/event/default");
+	
+}
+
+event ready(peer_name: string)
+{
+	print fmt("Sending queries at Peer =  %s ", peer_name);
+	
 	#if we are interested in new events
 	osquery::groupsubscribe("/bro/event/group1",query,"ADD");
-	#if we are interested in removed events
-	osquery::groupsubscribe("/bro/event/group1",query,"REMOVED");
-	#if we are interested in initial dump as well
-	osquery::groupsubscribe("/bro/event/group1",query,"ADD",T);
-	
+	osquery::groupsubscribe("/bro/event/group2",query,"REMOVED");
 }
 
 event BrokerComm::incoming_connection_broken(peer_name: string)
 {
 	print "BrokerComm::incoming_connection_broken", peer_name;
-	
 }
 
 ########################### ACPI TABLES ################################################
@@ -359,18 +401,10 @@ event block_devices(host: string, user: string, ev_type: string, name: string,ve
 }
 ```
 
-For multiple groups, you need to change the broker.ini at each osquery host to make it a part of specific group. For example, if there are three hosts and we wana make three groups, simply update broker.ini on each host with different 
-broker_topic "/bro/event/group1", "/bro/event/group2", "/bro/event/group3" respectively.
+For multiple groups, you need to add entries in ```gtable``` and then in the ```ready``` event subscribe queries with the group topic. A host can be only in a single group.
 And also define three different query tables e.g. query1, query2, query3, respectively.
 Then subscribe different group of queries on each group in BrokerComm::outgoing_connection_established event body.
-```
-event BrokerComm::outgoing_connection_established(peer_address: string, peer_port: port, peer_name: string)
-{
-	print "BrokerComm::outgoing_connection_establisted", 	peer_address, peer_port, peer_name;
-	osquery::groupsubscribe("/bro/event/group1",query1);
-	osquery::groupsubscribe("/bro/event/group2",query2);
-	osquery::groupsubscribe("/bro/event/group3",query3);
-```
+
 ----------------------------------------------
 ###Step 4: Error Handling and Logging###
 ----------------------------------------------
