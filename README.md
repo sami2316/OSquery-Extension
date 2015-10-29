@@ -125,10 +125,14 @@ event BrokerComm::incoming_connection_established(peer_name: string)
 
 event ready(peer_name: string)
 {
-	print fmt("Sending queries at Peer =  %s ", peer_name);
+print fmt("Sending queries at Peer =  %s ", peer_name);
 	#if we are interested in new usb_devices then
-	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group1");
-	#if we are interested in removed usb_devices then
+if (peer_name in gtable)
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices",gtable[peer_name]);
+else
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/default");
+
+	#if we are interested in removed usb_devices for host in group1
 	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM 	usb_devices","/bro/event/group1","REMOVED");
 	#if you want an initial dump for the requrest query then set inidumpflag to True
 	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/group1","Removed",T);
@@ -147,7 +151,7 @@ event usb_devices(host: string, user: string, ev_type: string, usb_address: int,
  	print fmt("Host = %s user=%s Event_type= %s Usb_address = %d Vendor = %s Model = %s",host, user, ev_type, usb_address, vendor, model);
 }
 ```
-Note: First three arguments of subscribe are necessary, becareful to write them properly. Third argument is topic to register and join a group. With it querying will be useless. 
+Note: First three arguments of subscribe are necessary, becareful to write them properly. Third argument is topic to register and join a group. Topic in table and subscribe function should match. Without it querying will be useless. 
 Please refer to group.bro to write scripts to monitor other events.
 
 ####3.2 Scenario 2: A master to a single remote host monitoring with multiple queries subscription####
@@ -206,11 +210,15 @@ event ready(peer_name: string)
 	print fmt("Sending queries at Peer =  %s ", peer_name);
 	
 	#if we are interested in new events
-	osquery::groupsubscribe("/bro/event/group1",query,"ADD");
+	if (peer_name in gtable)
+		osquery::groupsubscribe(gtable[peer_name],query,"ADD");
+	else
+		osquery::groupsubscribe("/bro/event/default",query,"ADD");
+
 	#if we are interested in removed events
-	osquery::groupsubscribe("/bro/event/group1",query,"REMOVED");
+	#osquery::groupsubscribe("/bro/event/group1",query,"REMOVED");
 	#if we are interested in initial dump as well
-	osquery::groupsubscribe("/bro/event/group1",query,"ADD",T);
+	#osquery::groupsubscribe("/bro/event/group1",query,"ADD",T);
 }
 
 event BrokerComm::incoming_connection_broken(peer_name: string)
