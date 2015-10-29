@@ -151,7 +151,11 @@ event usb_devices(host: string, user: string, ev_type: string, usb_address: int,
  	print fmt("Host = %s user=%s Event_type= %s Usb_address = %d Vendor = %s Model = %s",host, user, ev_type, usb_address, vendor, model);
 }
 ```
-Note: First three arguments of subscribe are necessary, becareful to write them properly. Third argument is topic to register and join a group. Topic in table and subscribe function should match. Without it querying will be useless. 
+Note: First three arguments of subscribe are necessary, becareful to write them properly. Third argument is topic to register and join a group. Topic in table and subscribe function should match. Without it querying will be useless.
+Take care of following steps:
+1- corresponding topic in table
+2- 3rd argument (topic) of subscription function
+3- topic matching of above two steps
 Please refer to group.bro to write scripts to monitor other events.
 
 ####3.2 Scenario 2: A master to a single remote host monitoring with multiple queries subscription####
