@@ -119,7 +119,7 @@ event BrokerComm::incoming_connection_established(peer_name: string)
 	if (peer_name in gtable)
 		osquery::print("/bro/event/",gtable[peer_name]);
 	else
-		osquery::print("/bro/event/", "/bro/event/default");
+		osquery::print("/bro/event/", "/bro/event/" + peer_name);
 
 }
 
@@ -130,7 +130,7 @@ print fmt("Sending queries at Peer =  %s ", peer_name);
 if (peer_name in gtable)
 	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices",gtable[peer_name]);
 else
-	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/default");
+	osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM usb_devices","/bro/event/" + peer_name);
 
 	#if we are interested in removed usb_devices for host in group1
 	#osquery::subscribe(usb_devices,"SELECT usb_address,vendor,model FROM 	usb_devices","/bro/event/group1","REMOVED");
@@ -201,7 +201,7 @@ event BrokerComm::incoming_connection_established(peer_name: string)
 	if (peer_name in gtable)
 		osquery::print("/bro/event/",gtable[peer_name]);
 	else
-		osquery::print("/bro/event/", "/bro/event/default");
+		osquery::print("/bro/event/", "/bro/event/" + peer_name);
 	
 }
 
@@ -213,7 +213,7 @@ event ready(peer_name: string)
 	if (peer_name in gtable)
 		osquery::groupsubscribe(gtable[peer_name],query,"ADD");
 	else
-		osquery::groupsubscribe("/bro/event/default",query,"ADD");
+		osquery::groupsubscribe("/bro/event/" + peer_name,query,"ADD");
 
 	#if we are interested in removed events
 	#osquery::groupsubscribe("/bro/event/group1",query,"REMOVED");
