@@ -17,6 +17,11 @@
 BrokerConnectionManager::BrokerConnectionManager(std::string hostName,
         std::string btp,int bport)
 {
+    if ( ! btp.size() || btp[btp.size() - 1] != '/' )
+	btp += "/";
+
+    btp += "host/" + hostName;
+
     //initialize broker API
     broker::init();
     this->b_port = bport;
@@ -71,10 +76,11 @@ bool BrokerConnectionManager::connectToMaster(std::string master_ip,
     this->connected = false;
     this->peer = ptlocalhost->peer(master_ip,b_port);
     
-    while(!connected && !handler->gotExitSignal())
+    while(!connected && !(handler->gotExitSignal()))
     {
         auto conn_status = 
         this->ptlocalhost->outgoing_connection_status().want_pop();
+
         for(auto cs: conn_status)
         {
             if(cs.status == broker::outgoing_connection_status::tag::established)
@@ -92,9 +98,11 @@ bool BrokerConnectionManager::getAndSetTopic()
 {
     //get topic form message queue
     std::string temp = qm->getBrokerTopic(this->ptpfd,connected);
-    delete this->ptmq;
-    this->ptmq = NULL;
-    this->ptmq = new broker::message_queue(temp,*ptlocalhost);
+	if (temp.empty())
+      	  return false;
+    //delete this->ptmq;
+    //this->ptmq = NULL;
+    // this->ptmq = new broker::message_queue(temp,*ptlocalhost);
     delete this->ptpfd;
     // pooling for message queue
     ptpfd = new pollfd{this->ptmq->fd(), POLLIN, 0};
@@ -103,6 +111,7 @@ bool BrokerConnectionManager::getAndSetTopic()
     this->qm = new BrokerQueryManager(ptlocalhost,ptmq,temp);
     
     qm->sendReadytoBro();
+	return true;
 }
 
 bool BrokerConnectionManager::getAndProcessQuery()
