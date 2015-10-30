@@ -42,6 +42,8 @@ int main(int argc, char* argv[]) {
   bool processResponse;
   //connection response
   bool connectionResponse;
+  //to store getandSetTopic response 
+  bool topicResponse;
   //FileReader Class Object
   FileReader fileReader;
   //SignalHandler object to trace kill signal
@@ -73,15 +75,20 @@ if(fileResponse == 0)
             
             processResponse = false;
             connectionResponse = false;
+	    topicResponse = false;
             // Try to establish connection with master at IP given in
             // "broker.ini"
             connectionResponse = ptBCM->connectToMaster(fileReader.getMasterIp()
                     ,std::chrono::duration<double>
             (std::atoi(fileReader.getRetryInterval().c_str())), signalHandler);
-            ptBCM->getAndSetTopic();
+	    //if connection is establised then listen for group topic
+	    if (connectionResponse)
+            {
+                topicResponse=ptBCM->getAndSetTopic();
+	    }
             
-            // When connection is established then process queries
-            if (connectionResponse)
+            // When group topic is received then process queries
+            if (connectionResponse && topicResponse)
             {
                 processResponse = ptBCM->getAndProcessQuery();
                 // if query processing is successful
