@@ -199,7 +199,7 @@ public:
     * @param event_type Event type might be ADD, REMOVE, INIT_DUMP
     * @param iterator internal variable to map table with corresponding query
     */
-    void sendUpdateEventToMaster(const QueryData& temp, std::string& event_type,
+    void sendUpdateEventToMaster(const QueryData& temp, std::string event_type,
         int& iterator);
     
     /**
@@ -281,6 +281,14 @@ public:
      * 
      */
     void sendReadytoBro();
+    
+    /**
+     * @brief SQL query formating checking
+     * 
+     * @param str SQL query string
+     * @return return formated SQL string
+     */
+    std::string formateSqlString(std::string str);
 };
 
 
