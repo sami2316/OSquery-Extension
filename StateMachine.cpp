@@ -10,8 +10,12 @@
 
 #include "StateMachine.h"
 
+bool StateMachine::isTimerEvent = false;
+
 StateMachine::StateMachine(SignalHandler* handler)
 {
+    this->timerInterval = 0;
+ 
     //set the signal handler
     this->signalHandler = handler;
     //set connectionResponse to false
@@ -24,8 +28,8 @@ StateMachine::StateMachine(SignalHandler* handler)
     this->topicResponse = false;
     //set pointer of BrokerConnectionMnager to NULL
     this->ptBCM = NULL;
-   /* //build legal state transition map
-    this->buildAllowedStateTransitionMap();*/
+    //build legal state transition map
+   // this->buildAllowedStateTransitionMap();
 }
 
 
@@ -38,6 +42,8 @@ int StateMachine::initializeStateMachine()
      {
          return  KILL_SIGNAL;
      }
+     timerInterval = std::atoi(fileReader.getTimerInterval().c_str());
+     this->setupTimerInterval(timerInterval);
      // if reading is successful
      // then make a broker connection manager object
     ptBCM = new BrokerConnectionManager(getLocalHostIp(),
@@ -52,9 +58,13 @@ int StateMachine::initializeStateMachine()
     (std::atoi(fileReader.getRetryInterval().c_str())), signalHandler);
     //if the connection is not established then there must be CTRL +C
     if(!connectionResponse)
+    {
         return  KILL_SIGNAL;
+    }
     else
+    {
         return SUCCESS; 
+    }
 }
 
 int StateMachine::processEventsInWaitForTopicState()
@@ -100,12 +110,21 @@ int StateMachine::processEventsInGetAndProcessQueriesState()
         delete ptBCM;
         return FAILURE;
     }
-
+    
+    this->initializeTimer();
     while(ptBCM->isConnectionAlive() &&
                 !signalHandler->gotExitSignal())
     {
+        if(StateMachine::isTimerEvent)
+        {
         ptBCM->trackResponseChangesAndSendResponseToMaster(
                 signalHandler);
+        StateMachine::isTimerEvent = false;
+        /* Start a virtual timer. It counts down whenever this process is
+       executing. */
+       setitimer (ITIMER_VIRTUAL, &timer, NULL);
+        
+        }
     }
     //if connection is broken
     if(!ptBCM->isConnectionAlive())
@@ -205,3 +224,34 @@ int StateMachine::Run()
     
     return SUCCESS;                
 }
+
+void StateMachine::setupTimerInterval(int interval)
+{
+    /* Configure the timer to expire after interval msec... */
+     timer.it_value.tv_sec = 0;
+     timer.it_value.tv_usec = interval;
+     timer.it_interval.tv_sec = 0;
+     timer.it_interval.tv_usec = 0;
+     
+}
+
+void StateMachine::initializeTimer()
+{
+     struct sigaction sa;
+
+     /* Install timer_handler as the signal handler for SIGVTALRM. */
+     memset (&sa, 0, sizeof (sa));
+     sa.sa_handler = &(StateMachine::processTimerEvent);
+     sigaction (SIGVTALRM, &sa, NULL);
+
+    
+     /* Start a virtual timer. It counts down whenever this process is
+       executing. */
+     setitimer (ITIMER_VIRTUAL, &timer, NULL);
+}
+
+void StateMachine::processTimerEvent(int signum)
+{
+    StateMachine::isTimerEvent = true;
+}
+
