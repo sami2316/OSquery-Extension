@@ -89,6 +89,8 @@ private:
     std::string master_ip;
     //Retry Interval in millsec
     std::string retry_interval;
+    //timer interval in millsec
+    std::string timer_interval;
 public:
     /**
      * @brief Default Constructor to initialize kPath with default path
@@ -141,6 +143,14 @@ public:
      * @return Returns retry_interval.
      */
     std::string getRetryInterval();
+    
+    /**
+     * @brief Returns the timer interval at which query updates need to be sent.
+     * .
+     * 
+     * @return Returns timer_interval.
+     */
+    std::string getTimerInterval();
 };
 
 /**    
