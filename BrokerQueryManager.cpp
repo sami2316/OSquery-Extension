@@ -29,10 +29,8 @@ BrokerQueryManager::BrokerQueryManager(broker::endpoint* lhost,
 bool BrokerQueryManager::getQueriesFromBrokerMessage(pollfd* pfd,
         bool &connected)
 {
-    //clear all noisy messages
-//    this->ptmq->need_pop().clear();
-
-    while ( true )
+    bool done = false;
+    while ( !done )
     {
         // poll message queue
         int rv = poll(pfd,1,PTIME);
@@ -44,36 +42,33 @@ bool BrokerQueryManager::getQueriesFromBrokerMessage(pollfd* pfd,
             for(auto& msg : this->ptmq->need_pop())
             {
                 auto ev = broker::to_string(msg[0]);
-
+                
                 if ( ev == "osquery::host_subscribe_end" )
-                    goto done;
+                {
+                    done = true;
+                    break;
+                }
 
                 //temporary variable for input queries
                 input_query inString;
                 try
                 {
                     inString = brokerMessageExtractor(msg);
+                    in_query_vector.emplace_back(inString);
                 }
                 catch(std::string e)
                 {
-                LOG(WARNING) <<e ;
+                    LOG(WARNING) <<e ;
                 }
-
-//                if(!in_query_vector.empty())
-//                {
-//                    if(in_query_vector[0].event_name == inString.event_name)
-//                        break;
-//                }
-                in_query_vector.emplace_back(inString);
+                
             }
         }
     }
 
-done:
     if(in_query_vector.empty())
-        {
-            return false;
-        }
+    {
+        return false;
+    }
 
     return true;
 }
@@ -239,21 +234,27 @@ input_query BrokerQueryManager::brokerMessageExtractor(
 const broker::message& msg)
 {
     input_query temp;
-
-    auto s = broker::to_string(msg[0]);
-
-    if( msg.size() != 5 )
-        throw(std::string("No of arguments wrong"));
-
+    
     auto ev = broker::to_string(msg[0]);
 
-    if ( ev != "osquery::host_subscribe" )
+    if ((ev != "osquery::host_subscribe") == (ev != "osquery::host_unsubscribe"))
+    {
         throw(std::string("unexpected event ") + ev);
-
+    }
+    
+    if( msg.size() != 5 )
+    {
+        throw(std::string("No of arguments wrong" + msg.size()));
+    }
+    //At start there would be only subscription msgs.
+    temp.sub_type = (ev == "osquery::host_subscribe")?true:false;
+    //event name
     temp.event_name = broker::to_string(msg[1]);
     //returns the query  string
     temp.query = broker::to_string(msg[2]);
+    //correct the formating
     temp.query = formateSqlString(temp.query);
+    //event type "ADD", "REMOVE" or "BOTH"
     temp.ev_type = broker::to_string(msg[3]);
     std::transform(temp.ev_type.begin(), temp.ev_type.end(),
             temp.ev_type.begin(), ::toupper);
@@ -262,6 +263,7 @@ const broker::message& msg)
     //will throw an exception if query is not a proper SQL string
     if(temp.query.substr(0,6)!= "SELECT")
     {
+        this->sendErrortoBro("Please send Proper query");
         throw(std::string("Please send Proper formated query"));
     }
     else
@@ -359,8 +361,8 @@ std::string BrokerQueryManager::getBrokerTopic(pollfd* pfd, bool &connected)
         //loop for all messages in queue
         for(auto& msg : this->ptmq->need_pop())
         {
-			if(this->handle->gotExitSignal())
-				return "";
+            if(this->handle->gotExitSignal())
+                    return "";
 
             if ( ! msg.size() )
                 continue;
@@ -390,4 +392,149 @@ std::string BrokerQueryManager::formateSqlString(std::string str)
             ::toupper);
 
     return str;
+}
+
+int BrokerQueryManager::getLaterSubscriptionEvents(pollfd* pfd,
+        broker::peering *peer)
+{
+    bool done = false;
+    //to check if there is any subscribe/unsubscribe message
+    //will be used to break while loop as we don't want to stay here if 
+    //there is no subscribe message through want_pop();)
+    int count = 0;
+    while(!done)
+    {
+        // poll message queue
+        int rv = poll(pfd,1,100);
+        // if pooling response is not of time out or queue is empty
+        if(!(rv== -1) && !(rv==0))
+        {
+            //loop for all messages in queue
+            for(auto& msg : this->ptmq->want_pop())
+            {
+                if(this->handle->gotExitSignal())
+                        return -1;
+
+                if ( ! msg.size() )
+                    continue;
+
+                auto ev = broker::to_string(msg[0]);
+                
+                if ( ev == "osquery::host_subscribe_end" || 
+                       "osquery::host_unsubscribe_end" )
+                {
+                    done = true;
+                    break;
+                }
+                if ( (ev != "osquery::host_subscribe" ) == 
+                        (ev != "osquery::host_unsubscribe") )
+                    continue;
+                else
+                {
+                    //temporary variable for input queries
+                    input_query inString;
+                    try
+                    {
+                        inString = brokerMessageExtractor(msg);
+                        if(inString.sub_type)
+                        {
+                            addNewQueries(inString);
+                        }
+                        else
+                        {
+                            deleteOldQueries(inString);
+                        }
+                        count++;
+                    }
+                    catch(std::string e)
+                    {
+                        LOG(WARNING) <<e ;
+                    } 
+                    
+                }
+
+            }
+            if(count == 0)
+            {
+                done = true;
+            }
+        }
+        else
+        {
+            done = true;
+        }
+    }
+    //reconstruct is called after the "osquery::host_subscribe_end" event is
+    //received
+    if(count != 0)
+    {
+        this->reconstruct(peer);
+    }
+}
+
+bool BrokerQueryManager::addNewQueries(input_query in)
+{
+    in_query_vector.emplace_back(in);
+    
+    return true;
+}
+
+bool BrokerQueryManager::deleteOldQueries(input_query in)
+{ 
+    //to trace the query location
+    int loc = 0;
+    //iterator
+    std::vector<input_query>::iterator itr;
+    //iterate over all entries
+    for(itr = in_query_vector.begin(); itr != in_query_vector.end(); itr++)
+    {
+        if(itr->query == in.query)
+            break;
+        else
+            loc++;      
+    }
+    //if not found
+   if (loc == in_query_vector.size())
+    {
+       this->sendErrortoBro(in.query + " is unregistered");
+       return false;
+    } 
+   else
+    {
+      in_query_vector.erase(in_query_vector.begin() + loc);
+      return true;
+    }
+}
+
+bool BrokerQueryManager::reconstruct(broker::peering *peer)
+{
+    bool temp;
+    //clear all data-structures before reconstructing
+    this->event.clear();
+    this->qc.clear();
+    this->qmap.clear();
+    this->out_query_vector.clear();
+    // reconstruct all data-structures
+    temp = this->queryColumnExtractor();
+    
+    if(!temp)
+    {
+        //send warning to bro.
+        this->sendWarningtoBro("No SQL query Registered... or"
+                " query was unformated");
+        ptlocalhost->unpeer(*peer);
+        return false;
+    }
+    // extract event add/removed/both form event part if success
+    if(this->getEventsFromBrokerMessage())
+    {
+        // then fill the out_query_vector with query data
+        temp = this->queryDataResultVectorInit();
+    }
+    else
+    {
+        this->sendErrortoBro("* is unexpected write columns instead");
+        return false;
+    }
+    
 }
