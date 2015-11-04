@@ -23,6 +23,7 @@
 #include "BrokerQueryManager.h"
 #include "BrokerQueryPlugin.h"
 #include "utility.h"
+#include "StateMachine.h"
 
 
 
@@ -34,110 +35,39 @@ REGISTER_EXTERNAL(BrokerQueryManagerPlugin, "config", "brokerQueryManager")
 // main runner
 int main(int argc, char* argv[]) {
     
-   
-  // BrokerConnectionManager class pointer
-  BrokerConnectionManager* ptBCM;
-  // to store  the return values of BrokerQueryManager functions and
-  // use it for comparison purpose
-  bool processResponse;
-  //connection response
-  bool connectionResponse;
-  //to store getandSetTopic response 
-  bool topicResponse;
-  //FileReader Class Object
-  FileReader fileReader;
-  //SignalHandler object to trace kill signal
-  SignalHandler *signalHandler = new SignalHandler;
-  
- //osquery::runner start logging, threads, etc. for our extension
+  //osquery::runner start logging, threads, etc. for our extension
   osquery::Initializer runner(argc, argv, OSQUERY_EXTENSION);
   LOG(WARNING) <<"Initialized OSquery." ;
   //wait for osqueryd to load
   usleep(1000000);
- 
- 
   
-//Reads hostName, broker_topic and broker_port form broker.ini file
-int fileResponse = fileReader.read();
-// if reading is successful
-if(fileResponse == 0)
-{
-    try
+    //SignalHandler object to trace kill signal
+  SignalHandler *signalHandler = new SignalHandler;
+  //To start the program form INIT state.
+  current_state = INIT;
+  try
     {
         // try setting up signal handler for kill signal
-        signalHandler->setupSignalHandler();
-        do
-        {
-            // then make a broker connection manager object
-            ptBCM = new BrokerConnectionManager(getLocalHostIp(),
-                fileReader.getBrokerTopic(),
-                std::atoi(fileReader.getBrokerConnectionPort().c_str()));
-            
-            processResponse = false;
-            connectionResponse = false;
-	    topicResponse = false;
-            // Try to establish connection with master at IP given in
-            // "broker.ini"
-            connectionResponse = ptBCM->connectToMaster(fileReader.getMasterIp()
-                    ,std::chrono::duration<double>
-            (std::atoi(fileReader.getRetryInterval().c_str())), signalHandler);
-	    //if connection is establised then listen for group topic
-	    if (connectionResponse)
-            {
-                topicResponse=ptBCM->getAndSetTopic();
-	    }
-            
-            // When group topic is received then process queries
-            if (connectionResponse && topicResponse)
-            {
-                processResponse = ptBCM->getAndProcessQuery();
-                // if query processing is successful
-                if(processResponse)
-                {   
-                    /*then Track changes and send response to master until 
-                     *connection is alive and no kill signal is received
-                     *////*
-                    while(ptBCM->isConnectionAlive() &&
-                            !signalHandler->gotExitSignal())
-                    {
-                        ptBCM->trackResponseChangesAndSendResponseToMaster(
-                                signalHandler);
-                    }
-                    ptBCM->getQueryManagerPointer()->sendWarningtoBro("CTRL+C" 
-                        " Signal Received");
-                    //close broker connection
-                    ptBCM->closeBrokerConnection();
-                    // if connection is down then reinitialize all query vectors
-                    ptBCM->getQueryManagerPointer()->ReInitializeVectors();
-                    //delete  BrokerConnectionManager Object
-                    delete ptBCM;
-                }
-                else
-                {
-                    ptBCM->getQueryManagerPointer()->sendErrortoBro("No queries"
-                    " sent from Bro-Master");
-                    //free resources
-                    ptBCM->getQueryManagerPointer()->ReInitializeVectors();
-                    //close broker connection
-                    ptBCM->closeBrokerConnection();
-                    //delete  BrokerConnectionManager Object
-                    delete ptBCM;
-                    LOG(WARNING) << "Could not Process Queries";
-                }
-            }
-            //run until kill signal is received
-        } while(!signalHandler->gotExitSignal());
-    }
-    // catches exception thrown at kill signal setup time
+      signalHandler->setupSignalHandler();
+      //StateMachine object
+      StateMachine smObj(signalHandler);
+      //run the state machine
+      int op_code = smObj.Run();
+
+      if(op_code == SUCCESS)
+      {
+        // delete SignalHandler object 
+        delete signalHandler;
+      }
+     }
+  // catches exception thrown at kill signal setup time
     catch(SignalException& e)
     {
+        // delete SignalHandler object 
+        delete signalHandler;
         LOG(ERROR) << "SignalException: " <<e.what();
     }
-    // delete SignalHandler object 
-    delete signalHandler;
-}
-    
-     
+  
     
 LOG(WARNING) <<"Shutting down extension";
 // Finally shutdown.
