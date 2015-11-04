@@ -19,6 +19,13 @@
 using namespace osquery;
 using std::runtime_error;
 
+
+ 
+/**
+ * enum for possible outputs of an operation
+ */
+enum OperationOutput {KILL_SIGNAL = -1, FAILURE = 0 , SUCCESS = 1};
+
 /*
  * @brief Exception Class
  */
