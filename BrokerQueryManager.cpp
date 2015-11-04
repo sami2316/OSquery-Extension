@@ -160,7 +160,7 @@ QueryData BrokerQueryManager::getQueryResult(const std::string& queryString)
 void BrokerQueryManager::diffResultsAndEventTriger(int& i)
 {
     //After each 1sec daemon will query
-    usleep(1000000);
+    //usleep(1000000);
     out_query_vector[i].current_results =
             getQueryResult(in_query_vector[i].query);
 
