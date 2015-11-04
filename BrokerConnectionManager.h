@@ -93,8 +93,9 @@ public:
      * 
      *  @param handle SignalHandler to track CTRL+C signal for lower level
      *  executing statements
+     * @return return operation state
      */ 
-    void trackResponseChangesAndSendResponseToMaster(SignalHandler *handle);
+    int trackResponseChangesAndSendResponseToMaster(SignalHandler *handle);
     
     /**    
      *  @brief Returns true if broker Connection is Alive
@@ -127,7 +128,7 @@ public:
      *  @brief gets broker topic from broker message and sets
      *  broker::message_queue to listen new topic. 
      */
-    bool getAndSetTopic();
+    int getAndSetTopic();
     
 };
 
