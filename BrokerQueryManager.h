@@ -43,6 +43,8 @@ struct input_query
     bool flag;
     //event type rather it is "ADD" or "REMOVED"
     std::string ev_type;
+    //subscribed or un-subscribed
+    bool sub_type;
 };
 
 /**
@@ -289,6 +291,42 @@ public:
      * @return return formated SQL string
      */
     std::string formateSqlString(std::string str);
+    
+    /**
+     * @brief Processes the subscription messages (subscribe / un-subscribe)
+     * and updates the vector/map entries accordingly.
+     * This function would pool broker messages the filter the desired events
+     * and then modify the local structures.
+     * 
+     * @param pfd pointer to polling object
+     * @param peer pointer to remote peer
+     * @return return 0 for success case and -1 for kill signal
+     */
+    int getLaterSubscriptionEvents(pollfd* pfd,broker::peering* peer);
+    
+    /**
+     * @brief update all vectors/map accordingly
+     * 
+     * @param in input_query vector to broker
+     * @return return ture if operation is successful
+     */
+    bool addNewQueries(input_query in);
+    
+    /**
+     * @brief remove corresponding entries form vectors/map  
+     * 
+     * @param in input_query vector to broker
+     * @return return ture if operation is successful
+     */
+    bool deleteOldQueries(input_query in);
+    
+     /**
+      * @brief This function is used to re-initialize local data-structures 
+      * after the subscription or un-subscription events.
+      * @param peer pointer to remote peer
+      * @return returns true if the operation is successful 
+      */
+    bool reconstruct(broker::peering *peer);
 };
 
 
