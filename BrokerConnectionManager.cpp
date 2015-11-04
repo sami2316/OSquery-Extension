@@ -94,15 +94,14 @@ bool BrokerConnectionManager::connectToMaster(std::string master_ip,
     return (!handler->gotExitSignal())? true: false;
 }
 
-bool BrokerConnectionManager::getAndSetTopic()
-{
+int BrokerConnectionManager::getAndSetTopic()
+{ 
     //get topic form message queue
     std::string temp = qm->getBrokerTopic(this->ptpfd,connected);
-	if (temp.empty())
-      	  return false;
-    //delete this->ptmq;
-    //this->ptmq = NULL;
-    // this->ptmq = new broker::message_queue(temp,*ptlocalhost);
+    
+    if (temp.empty())
+        return -1;
+    
     delete this->ptpfd;
     // pooling for message queue
     ptpfd = new pollfd{this->ptmq->fd(), POLLIN, 0};
@@ -111,7 +110,8 @@ bool BrokerConnectionManager::getAndSetTopic()
     this->qm = new BrokerQueryManager(ptlocalhost,ptmq,temp);
     
     qm->sendReadytoBro();
-	return true;
+    
+    return (this->isConnectionAlive())?1:0;
 }
 
 bool BrokerConnectionManager::getAndProcessQuery()
@@ -133,22 +133,31 @@ bool BrokerConnectionManager::getAndProcessQuery()
         this->connected = false;
         return false;
     }
-    // extract event add/removed form event part if success
+    // extract event add/removed/both form event part if success
     if(qm->getEventsFromBrokerMessage())
     {
         // then fill the out_query_vector with query data
         temp = qm->queryDataResultVectorInit();
     }
+    else
+    {
+        qm->sendErrortoBro("* is unexpected write columns instead");
+        return false;
+    }
     return temp;
 }
 
-void BrokerConnectionManager::trackResponseChangesAndSendResponseToMaster(
+int BrokerConnectionManager::trackResponseChangesAndSendResponseToMaster(
                     SignalHandler *handle)
 {
+    int local;
     //send a pointer to signal handler object created in main.cpp
     qm->setSignalHandle(handle);
     // start tracking updates
     qm->queriesUpdateTrackingHandler();
+    //check for new subscription messages
+    local = qm->getLaterSubscriptionEvents(ptpfd,&peer);
+    return local;
 }
 
 
