@@ -73,7 +73,7 @@ int FileReader::read()
         //if file not empty
         if(s.ok())
         {
-            std::string temp[5];
+            std::string temp[6];
             //split into lines
             auto strings = osquery::split(content,"\n");
             for(int i=0; i<strings.size();i++)
@@ -88,6 +88,7 @@ int FileReader::read()
             this->br_port = temp[2];
             this->master_ip = temp[3];
             this->retry_interval = temp[4];
+            this->timer_interval = temp[5];
         }
         else
         {
@@ -131,7 +132,10 @@ std::string FileReader::getRetryInterval()
     return this->retry_interval;
 }
 
-
+std::string FileReader::getTimerInterval()
+{
+    return this->timer_interval;
+}
 
 /*
  * End of FileReader Class member functions
