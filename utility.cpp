@@ -91,13 +91,13 @@ int FileReader::read()
         }
         else
         {
-            std::cerr << "Error reading file";
+            LOG(ERROR) << "Error reading file";
             return s.getCode();
         }
     }
     else
     {
-        std::cerr << "The Path does not exists";
+        LOG(ERROR) << "The Path does not exists";
         return 1;
     }
     return 0;
