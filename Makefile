@@ -1,4 +1,4 @@
- # 
+# 
  #  Copyright (c) 2015, Next Generation Intelligent Networks (nextGIN), RC.
  #  Institute of Space Technology
  #  All rights reserved.
@@ -40,16 +40,18 @@ OBJECTFILES= \
 	${OBJECTDIR}/BrokerConnectionManager.o \
 	${OBJECTDIR}/BrokerQueryManager.o \
 	${OBJECTDIR}/BrokerQueryPlugin.o \
+	${OBJECTDIR}/StateMachine.o \
 	${OBJECTDIR}/main.o \
 	${OBJECTDIR}/utility.o
 
 
+
 # C Compiler Flags
-CFLAGS=
+CFLAGS += -std=c++11 
 
 # CC Compiler Flags
-CCFLAGS=-lbroker
-CXXFLAGS=-lbroker
+CCFLAGS=-lbroker -std=c++11
+CXXFLAGS=-lbroker -std=c++11
 
 # Fortran Compiler Flags
 FFLAGS=
@@ -81,15 +83,21 @@ ${OBJECTDIR}/BrokerQueryPlugin.o: BrokerQueryPlugin.cpp
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/BrokerQueryPlugin.o BrokerQueryPlugin.cpp
 
-${OBJECTDIR}/main.o: main.cpp 
+${OBJECTDIR}/StateMachine.o: StateMachine.cpp 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.cpp
+	$(COMPILE.cc) -O2 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/StateMachine.o StateMachine.cpp
 
 ${OBJECTDIR}/utility.o: utility.cpp 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/utility.o utility.cpp
+
+${OBJECTDIR}/main.o: main.cpp 
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.cpp
+
 
 #install Target
 install: ${OBJECTFILES}
@@ -99,7 +107,7 @@ install: ${OBJECTFILES}
 	${MKDIR} -p /var/osquery
 	sudo cp -rf broker.ini /var/osquery/
 	${MKDIR} -p /etc/osquery
-	sudo echo "/usr/lib/osquery/extensions/BrokerQueryManagerPlugin.ext" > extensions.load
+	sudo echo "/usr/lib/osquery/extensions/BrokerQueryManagerPlugin.ext" > /etc/osquery/extensions.load
 
 # Clean Targets
 .clean-conf: ${CLEAN_SUBPROJECTS}
@@ -108,5 +116,4 @@ install: ${OBJECTFILES}
 
 # Subprojects
 .clean-subprojects:
-
 
