@@ -20,6 +20,7 @@
 #include <osquery/registry.h>
 #include <sstream>
 #include <csignal>
+#include <sys/time.h>
 #include "BrokerConnectionManager.h"
 #include "BrokerQueryManager.h"
 #include "BrokerQueryPlugin.h"
@@ -37,16 +38,20 @@
  */
 enum State {INIT, WAIT_FOR_TOPIC,GET_AND_PROCESS_QUERIES,TERMINATE};
 
-/*enum Event {CONNECTION_ESTABLISHED_EVENT,CONNECTION_BROKEN_EVENT, 
+enum Event {CONNECTION_ESTABLISHED_EVENT,CONNECTION_BROKEN_EVENT, 
             SIG_KILL_EVENT, PARAM_READ_EVENT, TOPIC_RECEIVED_EVENT, 
             HOST_SUBSCRIBE_EVENT, HOST_UNSUBSCRIBE_EVENT
-            };*/
+            };
 // To hold the current state
 static State current_state;
 
 class StateMachine
 {
 private:
+    struct itimerval timer;
+    //timer interval in millsec variable
+    int timerInterval;
+    static bool isTimerEvent;
     // BrokerConnectionManager class pointer
   BrokerConnectionManager* ptBCM;
   // to store  the return values of BrokerQueryManager functions and
@@ -62,6 +67,7 @@ private:
   FileReader fileReader;
   //SignalHandler object to trace kill signal
   SignalHandler *signalHandler;
+  
   
 private:
     /**
@@ -102,6 +108,11 @@ private:
     //std::pair<int,eventQueue*> waitForEvents();
    // bool processEvents(State,Event);
    // void buildAllowedStateTransitionMap();
+    /**
+     */
+    void initializeTimer();
+    static void processTimerEvent(int signum);
+    void setupTimerInterval(int interval);
 public:
     
     /**
