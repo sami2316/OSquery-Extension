@@ -38,23 +38,23 @@ int main(int argc, char* argv[]) {
   //osquery::runner start logging, threads, etc. for our extension
   osquery::Initializer runner(argc, argv, OSQUERY_EXTENSION);
   LOG(WARNING) <<"Initialized OSquery." ;
-  //wait for osqueryd to load
+  //wait 1sec for osqueryd to load
   usleep(1000000);
   
     //SignalHandler object to trace kill signal
   SignalHandler *signalHandler = new SignalHandler;
   //To start the program form INIT state.
-  current_state = INIT;
+  currentState = INIT;
   try
     {
-        // try setting up signal handler for kill signal
+      // try setting up signal handler for kill signal
       signalHandler->setupSignalHandler();
       //StateMachine object
       StateMachine smObj(signalHandler);
       //run the state machine
-      int op_code = smObj.Run();
-
-      if(op_code == SUCCESS)
+      int statusCode = smObj.Run();
+      
+      if(statusCode == SUCCESS)
       {
         // delete SignalHandler object 
         delete signalHandler;
@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
         delete signalHandler;
         LOG(ERROR) << "SignalException: " <<e.what();
     }
-  
+ 
     
 LOG(WARNING) <<"Shutting down extension";
 // Finally shutdown.

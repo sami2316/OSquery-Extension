@@ -82,15 +82,15 @@ private:
     // local host Name
     std::string hostName;
     // broker topic necessary for receiving interested 
-    std::string b_topic;
+    std::string bTopic;
     // broker connection port
-    std::string br_port;
+    std::string brPort;
     //Bro master IP
-    std::string master_ip;
+    std::string masterIP;
     //Retry Interval in millsec
-    std::string retry_interval;
+    std::string retryInterval;
     //timer interval in millsec
-    std::string timer_interval;
+    std::string timerInterval;
 public:
     /**
      * @brief Default Constructor to initialize kPath with default path
@@ -129,7 +129,7 @@ public:
     /**
      * @brief Returns Bro Master ip string
      * 
-     * @return Returns master_ip
+     * @return Returns masterIP
      */
     std::string getMasterIp();
     
@@ -140,15 +140,15 @@ public:
      * attempt will generate a lot of trafic. So to minimize probing trafic 
      * this field  is used as control variable.
      * 
-     * @return Returns retry_interval.
+     * @return Returns retryInterval.
      */
     std::string getRetryInterval();
     
     /**
-     * @brief Returns the timer interval at which query updates need to be sent.
-     * .
+     * @brief Returns the timer interval at which the query updates need to be
+     * sent.
      * 
-     * @return Returns timer_interval.
+     * @return Returns timerInterval.
      */
     std::string getTimerInterval();
 };

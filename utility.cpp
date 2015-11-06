@@ -57,7 +57,7 @@ void SignalHandler::setExitSignal(bool _bExitSignal)
 FileReader::FileReader()
 {
     //initialize kPath with the file directory 
-    this->kPath = "/var/osquery/broker.ini";
+    kPath = "/var/osquery/broker.ini";
 }
 
 int FileReader::read()
@@ -83,12 +83,12 @@ int FileReader::read()
                 temp[i] = sp[1].substr(1,sp[1].size()-2);  
             }
             //assign values to hostName, broker-topic and broker_port
-            this->hostName = temp[0];
-            this->b_topic = temp[1];
-            this->br_port = temp[2];
-            this->master_ip = temp[3];
-            this->retry_interval = temp[4];
-            this->timer_interval = temp[5];
+            hostName = temp[0];
+            bTopic = temp[1];
+            brPort = temp[2];
+            masterIP = temp[3];
+            retryInterval = temp[4];
+            timerInterval = temp[5];
         }
         else
         {
@@ -107,34 +107,34 @@ int FileReader::read()
 std::string FileReader::getHostName()
 {
     //return local host name
-    return this->hostName;
+    return hostName;
 }
 
 std::string FileReader::getBrokerTopic()
 {
     //return broker_topic in string form
-    return this->b_topic;
+    return bTopic;
 }
 
 std::string FileReader::getBrokerConnectionPort()
 {
     //return broker port in string form
-    return this->br_port;
+    return brPort;
 }
 
 std::string FileReader::getMasterIp()
 {
-    return this->master_ip;
+    return masterIP;
 }
 
 std::string FileReader::getRetryInterval()
 {
-    return this->retry_interval;
+    return retryInterval;
 }
 
 std::string FileReader::getTimerInterval()
 {
-    return this->timer_interval;
+    return timerInterval;
 }
 
 /*

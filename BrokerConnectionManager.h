@@ -14,13 +14,16 @@
 #include "utility.h"
 
 
-
+/**
+ * This class is responsible for broker connection management and as an higher 
+ * level implementation for broker query manager operations. 
+ */
 
 class BrokerConnectionManager
 {
 private:
     //broker port for listening connection
-    int b_port;
+    int bPort;
     // connection state tracking variable
     bool connected;
     // BrokerQueryManager pointer for processing query and generating
@@ -51,17 +54,6 @@ public:
     
     
     /**
-     *  @brief listens for broker connection
-     *   
-     *  This function is responsible for connection establishment.
-     *  Uses broker::listen() to listen new broker connections. Waits till
-     *  at-least there is one connection request.
-     * 
-     *  @return returns true if connection is established
-     */ 
-    bool listenForBrokerConnection();
-    
-    /**
      * @brief connect to master
      * 
      * This function is responsible for connection establishment.
@@ -78,6 +70,16 @@ public:
                         retry_interval, SignalHandler* handler);
     
     /**
+     *  @brief receives the broker topic extracted from broker message after
+     *  topic event and then sets the broker::message_queue to start listening
+     *  at new topic.
+     *  
+     *  @param gTopic group topic string
+     * 
+     */
+    int getAndSetTopic(std::string gTopic);
+    
+    /**
      *  @brief Reads broker messages from queue and then Extracts messages 
      *  event name and  query string. Processes each query to corresponding
      *  query columns that will be used to map query columns with event
@@ -85,7 +87,7 @@ public:
      *  
      *  @return Returns ture if there is successful get and extraction.
      */ 
-    bool getAndProcessQuery();
+    bool processQueriesVectors();
     
     /**
      *  @brief When connection is established and queries are processed then
@@ -117,18 +119,28 @@ public:
      */ 
     BrokerQueryManager* getQueryManagerPointer();
     
+    /**    
+     *  @brief Returns pollfd pointer 
+     *  pollfd pointer is required to poll broker::message queue
+     * 
+     *  @returns local ptpfd pointer 
+     */  
+    pollfd* getPollfdPointer();
+    
+    /**    
+     *  @brief Returns broker::message_queue pointer 
+     *  broker::message_queue pointer is required to get broker::message
+     * 
+     *  @returns local ptmq pointer 
+     */  
+    broker::message_queue* getMessageQueuePointer();
+    
     /**
      * @brief Closes the broker connection 
      * Simply un-peer the already established connection
      * 
      */
     void closeBrokerConnection();
-    
-    /**
-     *  @brief gets broker topic from broker message and sets
-     *  broker::message_queue to listen new topic. 
-     */
-    int getAndSetTopic();
     
 };
 

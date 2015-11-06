@@ -14,27 +14,27 @@ bool StateMachine::isTimerEvent = false;
 
 StateMachine::StateMachine(SignalHandler* handler)
 {
-    this->timerInterval = 0;
+    timerInterval = 0;
  
     //set the signal handler
-    this->signalHandler = handler;
+    signalHandler = handler;
     //set connectionResponse to false
-    this->connectionResponse = false;
+    connectionResponse = false;
     // set fileResponse to false
-    this->fileResponse = false;
+    fileResponse = false;
     // set processResponse to false
-    this->processResponse = false;
+    processResponse = false;
     // set topicResponse to false;
-    this->topicResponse = false;
+    topicResponse = false;
     //set pointer of BrokerConnectionMnager to NULL
-    this->ptBCM = NULL;
-    //build legal state transition map
-   // this->buildAllowedStateTransitionMap();
+    ptBCM = NULL;
 }
 
 
 int StateMachine::initializeStateMachine()
 {
+    //set currentState to INIT at start
+    currentState = INIT;
     //Reads hostName, broker_topic and broker_port form broker.ini file
      fileResponse = fileReader.read();
      // if reading is not successful
@@ -42,8 +42,11 @@ int StateMachine::initializeStateMachine()
      {
          return  KILL_SIGNAL;
      }
+     
+     //initialize the timer with timer_interval after reading broker.ini
      timerInterval = std::atoi(fileReader.getTimerInterval().c_str());
-     this->setupTimerInterval(timerInterval);
+     setupTimerInterval(timerInterval);
+     
      // if reading is successful
      // then make a broker connection manager object
     ptBCM = new BrokerConnectionManager(getLocalHostIp(),
@@ -67,12 +70,105 @@ int StateMachine::initializeStateMachine()
     }
 }
 
-int StateMachine::processEventsInWaitForTopicState()
+PollData StateMachine::waitForEvents()
 {
-    topicResponse = 0;
-    //when connection is established then listen for group topic
-    topicResponse=ptBCM->getAndSetTopic();
-    if (topicResponse == 0)
+    //broker dequeue object
+    PollData msgQueue;
+    // poll message queue with polling time=0
+    int rv = poll(ptBCM->getPollfdPointer() ,1, 0);
+    // if pooling response is not of time out or queue is empty
+    if(!(rv== -1) && !(rv==0))
+    {
+        //loop for all messages in queue
+       msgQueue = ptBCM->getMessageQueuePointer()->want_pop();
+       return msgQueue;
+    }
+    else
+    {
+        msgQueue.clear();
+        return msgQueue;
+    }
+    
+}
+
+int StateMachine::extractAndProcessEvents(int event,broker::message msg)
+{
+    int statusCode = 0;
+    
+    switch(currentState)
+    {
+        case WAIT_FOR_TOPIC:
+            {
+                statusCode = processEventsInWaitForTopicState(event,msg);
+                break;
+            }
+        case GET_AND_PROCESS_QUERIES:
+            {
+                statusCode = processEventsInGetAndProcessQueriesState(event,msg);
+                break;  
+            }
+        case TERMINATE:
+        {
+            statusCode = processEventsInTerminateState();
+            return statusCode;
+        }
+        default:
+        {
+            LOG(WARNING) << "ILLEGAL state" ;
+        }
+    };
+    return statusCode;
+}
+
+int StateMachine::processEventsInWaitForTopicState(int ev,
+        broker::message msg)
+{
+    int statusCode = 0;
+    switch(ev)
+    {
+        case TOPIC_RECEIVED_EVENT:
+        {
+            statusCode = doActionsForGroupTopicEvent(msg);
+            setNextState(statusCode);
+            break;
+        }
+        case SIG_KILL_EVENT:
+        {
+            statusCode = doActionsForKillSignalEvent();
+            return statusCode;
+        }
+        case TIMER_EVENT:
+        {
+            //stop the timer.In this state timer is not allowed.
+            StateMachine::isTimerEvent = false;
+            break;
+        }
+        case CONNECTION_BROKEN_EVENT:
+        {
+            doActionsForConnectionBrokenEvent();
+            break;
+        }
+        default:
+        {
+            std::ostringstream stringStream;
+            stringStream << eventToString(ev) << " is not allowed in " <<
+                    "WAIT_FOR_TOPIC" << "expecting group topic events";
+            LOG(WARNING) << stringStream;
+            ptBCM->getQueryManagerPointer()->
+                sendErrortoBro(stringStream.str());
+        }
+    };
+}
+
+int StateMachine::doActionsForGroupTopicEvent(broker::message msg)
+{
+    //read the group topic
+    auto topic = broker::to_string(msg[1]);
+    LOG(WARNING) << "Group Topic: " << topic;
+    //set the new group topic
+    int statusCode = ptBCM->getAndSetTopic(topic);
+    
+    if (statusCode == 0)
     {
         LOG(WARNING) << "Connection Broken" ;
 
@@ -90,15 +186,85 @@ int StateMachine::processEventsInWaitForTopicState()
     }
 }
 
-int StateMachine::processEventsInGetAndProcessQueriesState()
-{
-    processResponse = false;
-    // When group topic is received then process queries
-    processResponse = ptBCM->getAndProcessQuery();
-    // if query processing is unsuccessful
-    if(!processResponse)
+int StateMachine::processEventsInGetAndProcessQueriesState(int ev,
+        broker::message msg)
+{ 
+    int statusCode = 0;
+    switch(ev)
     {
-        //close broker connection
+        case SIG_KILL_EVENT:
+        {
+            statusCode = doActionsForKillSignalEvent();
+            return statusCode;
+        }
+        case HOST_SUBSCRIBE_EVENT:
+        {
+            doActionsForHostSubscribeEvent(msg);
+            break;
+        }
+        case HOST_SUBSCRIBE_END_EVENT:
+        {
+            statusCode = doActionsForHostSubscribeEndEvent();
+            break;
+        }
+        case HOST_UNSUBSCRIBE_EVENT:
+        {
+            doActionsForHostUnSubscribeEvent(msg);
+            break;
+        }
+        case HOST_UNSUBSCRIBE_END_EVENT:
+        {
+            doActionsForHostUnSubscribeEndEvent();
+            break;
+        }
+        case CONNECTION_BROKEN_EVENT:
+        {
+            doActionsForConnectionBrokenEvent();
+            break;
+        }
+        case TIMER_EVENT:
+        {
+            doActionsForTimerEvent();
+            break;
+        }
+        default:
+        {
+            std::ostringstream stringStream;
+            stringStream << eventToString(ev) << " is not allowed in " <<
+                  "GET_AND_PROCESS_QUERIES " << "expecting subscription events";
+            LOG(WARNING) << stringStream;
+            ptBCM->getQueryManagerPointer()->
+                sendErrortoBro(stringStream.str());
+        }
+    };
+    
+}
+
+int StateMachine::doActionsForHostSubscribeEvent(broker::message msg)
+{
+    //temporary variable for input queries
+    input_query inString;
+    try
+    {
+        //try extracting broker::message
+        inString = ptBCM->getQueryManagerPointer()->brokerMessageExtractor(msg);
+        //if extraction is successful then add that query to local query vector
+        ptBCM->getQueryManagerPointer()->addNewQueries(inString);
+        
+    }
+    catch(std::string e)
+    {
+        LOG(WARNING) <<e ;
+    } 
+    return SUCCESS;
+}
+
+int StateMachine::doActionsForHostSubscribeEndEvent()
+{
+    int statusCode;
+    statusCode = ptBCM->processQueriesVectors();
+    if(!statusCode)
+    {
         ptBCM->closeBrokerConnection();
         LOG(WARNING) << "Could not Process Queries";
 
@@ -108,38 +274,36 @@ int StateMachine::processEventsInGetAndProcessQueriesState()
         ptBCM->getQueryManagerPointer()->ReInitializeVectors();
         //delete  BrokerConnectionManager Object
         delete ptBCM;
-        return FAILURE;
-    }
-    
-    this->initializeTimer();
-    while(ptBCM->isConnectionAlive() &&
-                !signalHandler->gotExitSignal())
-    {
-        if(StateMachine::isTimerEvent)
-        {
-        ptBCM->trackResponseChangesAndSendResponseToMaster(
-                signalHandler);
-        StateMachine::isTimerEvent = false;
-        /* Start a virtual timer. It counts down whenever this process is
-       executing. */
-       setitimer (ITIMER_VIRTUAL, &timer, NULL);
-        
-        }
-    }
-    //if connection is broken
-    if(!ptBCM->isConnectionAlive())
-    {
-        LOG(WARNING) << "Connection Broken" ;
-        // if connection is down then reinitialize all query vectors
-        ptBCM->getQueryManagerPointer()->ReInitializeVectors();
-        //delete  BrokerConnectionManager Object
-        delete ptBCM;
-        return FAILURE; 
     }
     else
     {
-        return KILL_SIGNAL;
+        initializeTimer();
+    } 
+    return statusCode;
+}
+
+int StateMachine::doActionsForHostUnSubscribeEvent(broker::message msg)
+{
+    input_query inString;
+    try
+    {
+        //try extracting broker::message
+        inString = ptBCM->getQueryManagerPointer()->brokerMessageExtractor(msg);
+        //if that query already exists then delete it.
+        ptBCM->getQueryManagerPointer()->deleteOldQueries(inString);
+        
     }
+    catch(std::string e)
+    {
+        LOG(WARNING) <<e ;
+    } 
+    return SUCCESS;
+}
+
+int StateMachine::doActionsForHostUnSubscribeEndEvent()
+{
+    int statusCode = doActionsForHostSubscribeEndEvent();
+    return statusCode;
 }
 
 int StateMachine::processEventsInTerminateState()
@@ -155,74 +319,129 @@ int StateMachine::processEventsInTerminateState()
     return SUCCESS;
 }
 
-void StateMachine::setNextState(int op_code)
+int StateMachine::doActionsForKillSignalEvent()
 {
-    switch(current_state)
+    ptBCM->getQueryManagerPointer()->sendWarningtoBro("CTRL+C" 
+                        " Signal Received");
+    //close broker connection
+    ptBCM->closeBrokerConnection();
+    // if connection is down then reinitialize all query vectors
+    ptBCM->getQueryManagerPointer()->ReInitializeVectors();
+    //delete  BrokerConnectionManager Object
+    delete ptBCM;
+    
+    return SIG_KILL_EVENT;
+}
+
+void StateMachine::setNextState(int statusCode)
+{
+    switch(currentState)
     {
         case INIT:
             {
-                if(op_code == KILL_SIGNAL)
-                    current_state = TERMINATE;
-                else if(op_code == SUCCESS)
-                    current_state = WAIT_FOR_TOPIC;
+                if(statusCode == KILL_SIGNAL)
+                    currentState = TERMINATE;
+                else if(statusCode == SUCCESS)
+                    currentState = WAIT_FOR_TOPIC;
                 break;
             }
         case WAIT_FOR_TOPIC:
             {
-                if(op_code == KILL_SIGNAL)
-                    current_state = TERMINATE;
-                else if(op_code == SUCCESS)
-                    current_state = GET_AND_PROCESS_QUERIES;
+                if(statusCode == KILL_SIGNAL)
+                    currentState = TERMINATE;
+                else if(statusCode == SUCCESS)
+                    currentState = GET_AND_PROCESS_QUERIES;
                 else
-                    current_state = INIT;
+                    currentState = INIT;
                 break;
             }
         case GET_AND_PROCESS_QUERIES:
             {
-                if(op_code == KILL_SIGNAL)
-                    current_state = TERMINATE;
+                if(statusCode == KILL_SIGNAL)
+                    currentState = TERMINATE;
+                else if (statusCode == FAILURE)
+                    currentState = INIT;
                 else
-                    current_state = INIT;
+                    currentState = currentState;
               break;  
             }
+        LOG(WARNING) << currentState;
     };
 }
 
-int StateMachine::Run()
-{    
-    //local variable to hold state operation code
-    int op_code = 0; 
-    do
+int StateMachine::stringToEvent(std::string in)
+{
+    if(in == "SIG_KILL_EVENT")
     {
-      switch(current_state)
-      {
-        case INIT:
+        return SIG_KILL_EVENT;
+    }
+    else if(in == "osquery::host_set_topic")
+    {
+        return TOPIC_RECEIVED_EVENT;
+    }
+    else if(in == "osquery::host_subscribe")
+    {
+        return HOST_SUBSCRIBE_EVENT;
+    }
+    else if(in == "osquery::host_subscribe_end")
+    {
+        return HOST_SUBSCRIBE_END_EVENT;
+    }
+    else if(in == "osquery::host_unsubscribe")
+    {
+        return HOST_UNSUBSCRIBE_EVENT;
+    }
+    else if(in == "osquery::host_unsubscribe_end")
+    {
+        return HOST_UNSUBSCRIBE_END_EVENT;
+    }
+    else if(in == "CONNECTION_BROKEN_EVENT")
+    {
+        return CONNECTION_BROKEN_EVENT;
+    }
+    else if(in == "CONNECTION_ESTABLISHED_EVENT")
+    {
+        return CONNECTION_ESTABLISHED_EVENT;
+    }
+    else
+    {
+        return ILLEGAL_EVENT;
+    }
+}
+
+std::string StateMachine::eventToString(int ev)
+{
+    switch (ev)
+    {
+        case SIG_KILL_EVENT:
         {
-            op_code = initializeStateMachine();
-            setNextState(op_code);
-            break;
+            return "SIG_KILL_EVENT";
         }
-        case WAIT_FOR_TOPIC:
+        case TOPIC_RECEIVED_EVENT:
         {
-            op_code = processEventsInWaitForTopicState();
-            setNextState(op_code);
-            break;
+            return "TOPIC_RECEIVED_EVENT";
         }
-        case GET_AND_PROCESS_QUERIES:
+        case HOST_SUBSCRIBE_EVENT:
         {
-            op_code = processEventsInGetAndProcessQueriesState();
-            setNextState(op_code);
-          break;  
+            return "HOST_SUBSCRIBE_EVENT";
         }
-        case TERMINATE:
+        case HOST_SUBSCRIBE_END_EVENT:
         {
-         op_code =  processEventsInTerminateState();
-         return op_code;
+            return "HOST_SUBSCRIBE_END_EVENT";
         }
-      };
-    }while(!signalHandler->gotExitSignal());
-    
-    return SUCCESS;                
+        case HOST_UNSUBSCRIBE_EVENT:
+        {
+            return "HOST_UNSUBSCRIBE_EVENT";
+        }
+        case HOST_UNSUBSCRIBE_END_EVENT:
+        {
+            return "HOST_UNSUBSCRIBE_END_EVENT";
+        }
+        default:
+        {
+            return "ILLEGAL_EVENT";
+        }
+    };
 }
 
 void StateMachine::setupTimerInterval(int interval)
@@ -231,8 +450,7 @@ void StateMachine::setupTimerInterval(int interval)
      timer.it_value.tv_sec = 0;
      timer.it_value.tv_usec = interval;
      timer.it_interval.tv_sec = 0;
-     timer.it_interval.tv_usec = 0;
-     
+     timer.it_interval.tv_usec = 0;     
 }
 
 void StateMachine::initializeTimer()
@@ -243,11 +461,10 @@ void StateMachine::initializeTimer()
      memset (&sa, 0, sizeof (sa));
      sa.sa_handler = &(StateMachine::processTimerEvent);
      sigaction (SIGVTALRM, &sa, NULL);
-
     
      /* Start a virtual timer. It counts down whenever this process is
        executing. */
-     setitimer (ITIMER_VIRTUAL, &timer, NULL);
+     setitimer (ITIMER_VIRTUAL, &timer, NULL);     
 }
 
 void StateMachine::processTimerEvent(int signum)
@@ -255,3 +472,98 @@ void StateMachine::processTimerEvent(int signum)
     StateMachine::isTimerEvent = true;
 }
 
+
+int StateMachine::doActionsForTimerEvent()
+{
+    ptBCM->trackResponseChangesAndSendResponseToMaster(
+                signalHandler);
+        StateMachine::isTimerEvent = false;
+        /* Start a virtual timer. It counts down whenever this process is
+       executing. */
+       setitimer (ITIMER_VIRTUAL, &timer, NULL);
+}
+
+
+void StateMachine::doActionsForConnectionBrokenEvent()
+{
+    // if connection is down then reinitialize all query vectors
+    ptBCM->getQueryManagerPointer()->ReInitializeVectors();
+    //delete  BrokerConnectionManager Object
+    delete ptBCM;
+    
+}
+
+int StateMachine::Run()
+{   
+    int statusCode = 0;
+    do
+    {
+        StateMachine::isTimerEvent = false;
+        //initialize the state machine
+        statusCode = initializeStateMachine();
+        setNextState(statusCode);
+        if(statusCode == SUCCESS)
+        {
+            do 
+            {
+                PollData tempQueue = waitForEvents();
+                if(signalHandler->gotExitSignal())
+                {
+                    broker::message temp;
+                    currentEvent = SIG_KILL_EVENT;
+                    //pass kill signal to clean up the resources
+                    extractAndProcessEvents(currentEvent,temp);
+                   
+                }
+                else if(!ptBCM->isConnectionAlive())
+                {
+                    broker::message temp;
+                    extractAndProcessEvents(CONNECTION_BROKEN_EVENT,temp);
+                }
+                else if(isTimerEvent)
+                {
+                    broker::message temp;
+                    extractAndProcessEvents(TIMER_EVENT,temp);
+                }
+                else if(!tempQueue.empty())
+                {
+                    for(auto& msg : tempQueue)
+                    {
+                        if(signalHandler->gotExitSignal())
+                        {
+                            currentEvent = SIG_KILL_EVENT;
+                            extractAndProcessEvents(currentEvent,msg);
+                            break;
+                        }
+                        else
+                        {
+                            auto ev = broker::to_string(msg[0]);
+                            statusCode = extractAndProcessEvents(
+                                    stringToEvent(ev),msg);
+                            if(statusCode == SIG_KILL_EVENT)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+                else if(isTimerEvent)
+                {
+                    broker::message temp;
+                    extractAndProcessEvents(TIMER_EVENT,temp);
+                }
+                
+       
+            }while(ptBCM->isConnectionAlive() &&
+                    !signalHandler->gotExitSignal());
+            if(signalHandler->gotExitSignal())
+            {
+                doActionsForKillSignalEvent();
+            }
+            
+        }
+        
+    }while(!signalHandler->gotExitSignal());
+    
+    return SUCCESS;                
+}

@@ -86,10 +86,10 @@ class BrokerQueryManager
 {
 private:
     //broker topic string 
-    std::string b_topic;
+    std::string bTopic;
     //local machine user name
     char username[SIZE];
-    bool first_time;
+    bool firstTime;
     // To store the difference in query results
     DiffResults diff_result;
     //reference to local-host 
@@ -125,18 +125,6 @@ public:
             broker::message_queue* mq,
             std::string btp);
     
-    /**    
-     *  @brief Extracts queries form Broker messages 
-     * 
-     *  Reads broker queue to extract broker message in event format and then 
-     *  extracts SQL query from broker message.
-     *  
-     *  @param pointer to polling object
-     *  @param flag to check connection state.
-     * 
-     *  @return returns true if extraction is successful. 
-     */
-    bool getQueriesFromBrokerMessage(pollfd* pfd,bool &connected);
     
     /**    
      *  @brief Extracts update type form Events received   
@@ -264,19 +252,6 @@ public:
     void sendErrortoBro(std::string str);
     
     /**
-     * @brief Extracts the broker topic form broker message (group topic).
-     * Initially extension listens on default topic and then receives topic 
-     * (to make group) in first broker message and continues to listen for
-     *  broker messages on that topic. 
-     * 
-     *  @param pfd pointer to polling object
-     *  @param connected flag to check connection state.
-     * 
-     *  @return returns broker topic for group establishment 
-     */
-    std::string getBrokerTopic(pollfd* pfd, bool &connected);
-    
-    /**
      * @brief send errors to bro-side
      *  Sends ready event to bro side as an ACK message so that bro-side start
      *  sending SQL queries
@@ -291,18 +266,6 @@ public:
      * @return return formated SQL string
      */
     std::string formateSqlString(std::string str);
-    
-    /**
-     * @brief Processes the subscription messages (subscribe / un-subscribe)
-     * and updates the vector/map entries accordingly.
-     * This function would pool broker messages the filter the desired events
-     * and then modify the local structures.
-     * 
-     * @param pfd pointer to polling object
-     * @param peer pointer to remote peer
-     * @return return 0 for success case and -1 for kill signal
-     */
-    int getLaterSubscriptionEvents(pollfd* pfd,broker::peering* peer);
     
     /**
      * @brief update all vectors/map accordingly
@@ -320,13 +283,11 @@ public:
      */
     bool deleteOldQueries(input_query in);
     
-     /**
-      * @brief This function is used to re-initialize local data-structures 
-      * after the subscription or un-subscription events.
-      * @param peer pointer to remote peer
-      * @return returns true if the operation is successful 
-      */
-    bool reconstruct(broker::peering *peer);
+    /**
+     * @brief To check the status of in_query_vector whether empty or not 
+     * @return return ture if the in_query_vector is not empty 
+     */
+    bool getInQueryVectorStatus();   
 };
 
 
