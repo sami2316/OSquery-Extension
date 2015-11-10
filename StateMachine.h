@@ -161,12 +161,12 @@ private:
     int doActionsForHostSubscribeEvent(broker::message msg);
     
     /**
-     * @brief performs the required actions after "host subscribe end" event
+     * @brief updates the internal vectors with updated queries.
      * The main actions are to process received queries and initialize vectors
      * with corresponding data.
      * @return returns status code. It can be KILL_SIGNAL, SUCCESS or FAILURE
      */
-    int doActionsForHostSubscribeEndEvent();
+    int processMasterQuery();
     
     /**
      * @brief performs the required actions after "host subscribe end" event is 
@@ -176,16 +176,6 @@ private:
      */
     int doActionsForHostUnSubscribeEvent(broker::message msg);
     
-    /**
-     * @brief performs the required actions after "host un-subscribe end" event
-     * The main actions are to process received queries and initialize vectors
-     * with corresponding data.
-     * 
-     * TODO: subscription and un-subscription end event might be same in future
-     * 
-     * @return returns status code. It can be KILL_SIGNAL, SUCCESS or FAILURE
-     */
-    int doActionsForHostUnSubscribeEndEvent();
     
     /**
      * @brief To process the actions in TERMINATE state.

@@ -202,19 +202,9 @@ int StateMachine::processEventsInGetAndProcessQueriesState(int ev,
             doActionsForHostSubscribeEvent(msg);
             break;
         }
-        case HOST_SUBSCRIBE_END_EVENT:
-        {
-            statusCode = doActionsForHostSubscribeEndEvent();
-            break;
-        }
         case HOST_UNSUBSCRIBE_EVENT:
         {
             doActionsForHostUnSubscribeEvent(msg);
-            break;
-        }
-        case HOST_UNSUBSCRIBE_END_EVENT:
-        {
-            doActionsForHostUnSubscribeEndEvent();
             break;
         }
         case CONNECTION_BROKEN_EVENT:
@@ -242,6 +232,7 @@ int StateMachine::processEventsInGetAndProcessQueriesState(int ev,
 
 int StateMachine::doActionsForHostSubscribeEvent(broker::message msg)
 {
+    int statusCode=FAILURE;
     //temporary variable for input queries
     input_query inString;
     try
@@ -250,6 +241,8 @@ int StateMachine::doActionsForHostSubscribeEvent(broker::message msg)
         inString = ptBCM->getQueryManagerPointer()->brokerMessageExtractor(msg);
         //if extraction is successful then add that query to local query vector
         ptBCM->getQueryManagerPointer()->addNewQueries(inString);
+        //process queries
+        statusCode = processMasterQuery();
         
     }
     catch(std::string e)
@@ -259,7 +252,7 @@ int StateMachine::doActionsForHostSubscribeEvent(broker::message msg)
     return SUCCESS;
 }
 
-int StateMachine::doActionsForHostSubscribeEndEvent()
+int StateMachine::processMasterQuery()
 {
     int statusCode;
     statusCode = ptBCM->processQueriesVectors();
@@ -284,14 +277,19 @@ int StateMachine::doActionsForHostSubscribeEndEvent()
 
 int StateMachine::doActionsForHostUnSubscribeEvent(broker::message msg)
 {
+    int statusCode = FAILURE;
     input_query inString;
     try
     {
         //try extracting broker::message
         inString = ptBCM->getQueryManagerPointer()->brokerMessageExtractor(msg);
         //if that query already exists then delete it.
-        ptBCM->getQueryManagerPointer()->deleteOldQueries(inString);
-        
+        bool tm = ptBCM->getQueryManagerPointer()->deleteOldQueries(inString);
+        //process queries
+        if(tm)
+        {
+            statusCode = processMasterQuery();
+        }
     }
     catch(std::string e)
     {
@@ -300,11 +298,6 @@ int StateMachine::doActionsForHostUnSubscribeEvent(broker::message msg)
     return SUCCESS;
 }
 
-int StateMachine::doActionsForHostUnSubscribeEndEvent()
-{
-    int statusCode = doActionsForHostSubscribeEndEvent();
-    return statusCode;
-}
 
 int StateMachine::processEventsInTerminateState()
 {
@@ -480,7 +473,10 @@ int StateMachine::doActionsForTimerEvent()
         StateMachine::isTimerEvent = false;
         /* Start a virtual timer. It counts down whenever this process is
        executing. */
-       setitimer (ITIMER_VIRTUAL, &timer, NULL);
+        if(ptBCM->isConnectionAlive())
+        {
+            setitimer (ITIMER_VIRTUAL, &timer, NULL);
+        }
 }
 
 

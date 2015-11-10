@@ -43,6 +43,7 @@ bool BrokerQueryManager::getEventsFromBrokerMessage()
 
 bool BrokerQueryManager::queryColumnExtractor()
 {
+    LOG(WARNING) << "Current Queries";
     if(!qmap.empty())
     {
         qmap.clear();
