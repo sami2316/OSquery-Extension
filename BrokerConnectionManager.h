@@ -95,15 +95,14 @@ public:
      * 
      *  @param handle SignalHandler to track CTRL+C signal for lower level
      *  executing statements
-     * @return return operation state
+     *  @return return operation state
      */ 
     int trackResponseChangesAndSendResponseToMaster(SignalHandler *handle);
     
     /**    
-     *  @brief Returns true if broker Connection is Alive
-     * 
-     *  keeps track of disconnect signal if received then it raises disconnect
-     *  flag 
+     *  @brief Returns true if broker Connection is alive.
+     *  It scans the outgoing_connection_established status;if disconnected is
+     *  received then it raises disconnect flag. 
      * 
      * @return True if connection is up
      */ 
@@ -138,7 +137,6 @@ public:
     /**
      * @brief Closes the broker connection 
      * Simply un-peer the already established connection
-     * 
      */
     void closeBrokerConnection();
     

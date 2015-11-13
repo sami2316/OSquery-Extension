@@ -59,14 +59,10 @@ enum State {INIT, WAIT_FOR_TOPIC,GET_AND_PROCESS_QUERIES,TERMINATE};
 
 enum Event {TIMER_EVENT,CONNECTION_ESTABLISHED_EVENT,CONNECTION_BROKEN_EVENT, 
             SIG_KILL_EVENT, PARAM_READ_EVENT, TOPIC_RECEIVED_EVENT, 
-            HOST_SUBSCRIBE_EVENT, HOST_SUBSCRIBE_END_EVENT,
-            HOST_UNSUBSCRIBE_EVENT, HOST_UNSUBSCRIBE_END_EVENT, ILLEGAL_EVENT
+            HOST_SUBSCRIBE_EVENT, HOST_UNSUBSCRIBE_EVENT, ILLEGAL_EVENT
             };
-// To hold the current state
-static State currentState;
- //To hold the event 
-static Event currentEvent;
-
+            
+//broker::queue data type
 typedef std::deque<std::vector<broker::data>,
         std::allocator<std::vector<broker::data> > > PollData;
 
@@ -90,6 +86,10 @@ private:
   struct itimerval timer;
   //variable to check if timer has expired or has not
   static bool isTimerEvent;
+  //To hold the event 
+  static Event currentEvent;
+  //To hold the current state
+  static State currentState;
   //SignalHandler object to trace kill signal
   SignalHandler *signalHandler;
   // BrokerConnectionManager class pointer
@@ -117,10 +117,11 @@ private:
     PollData waitForEvents();
     
     /**
-     * @brief This function extracts event type from broker::message of
-     * broker message queue and then passes that event for further processing
+     * @brief This function extracts event type from "broker::message" of
+     * "broker::message_queue" and then passes that event for further processing
+     * 
      * @param event represents the events received (local or remote) after 
-     * polling process extracts the message form queue of broker::message.
+     * polling process extracts the message form queue of "broker::message".
      * @param msg broker::message received during polling process
      * 
      * @return returns status code. It can be KILL_SIGNAL, SUCCESS or FAILURE
@@ -131,6 +132,7 @@ private:
      * @brief To process the actions based on an event type in WAIT_FOR_TOPIC 
      * state. In this state kill signal and wait_for_topic are
      * allowed events all other are illegal events.
+     * 
      * @return returns status code. It can be KILL_SIGNAL, SUCCESS or FAILURE
      */
     int processEventsInWaitForTopicState(int event,broker::message msg);
@@ -186,8 +188,9 @@ private:
     int processEventsInTerminateState();
     
     /**
-     * @brief performs the required actions after "kill signal event" is received
+     * @brief performs the required actions after "SIG_KILL event" is received.
      * It will clean up the occupied resources.
+     * 
      * @return returns status code. It can be KILL_SIGNAL, SUCCESS or FAILURE
      */
     int doActionsForKillSignalEvent();
@@ -257,7 +260,7 @@ public:
     
     /**
      * @brief Constructor 
-     * To Initialize private member for safe usages
+     * To Initialize class fields for safe usages
      * 
      * @param signalHandler pointer to signal handler object created in main()
      */
