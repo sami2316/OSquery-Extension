@@ -146,7 +146,7 @@ public:
      *  This function need to be called after each query subscription message 
      *  for initializing out_query_vectors.   
      * 
-     *  @returns True if out_query_vector is initialized properly
+     *  @return True if out_query_vector is initialized properly
      */
     bool queryDataResultVectorInit();
     
@@ -268,7 +268,7 @@ public:
      * can be sent to bro-side.
      * 
      * @param str SQL query string
-     * @return return formated SQL string
+     * @return returns formated SQL string
      */
     std::string formateSqlString(std::string str);
     
@@ -277,7 +277,7 @@ public:
      * query to in_query_vector.
      * 
      * @param in input_query vector to broker
-     * @return return ture if operation is successful
+     * @return returns ture if operation is successful
      */
     bool addNewQueries(input_query in);
     
@@ -286,14 +286,14 @@ public:
      * provided query from in_query_vector.
      * 
      * @param in input_query vector to broker
-     * @return return ture if operation is successful
+     * @return returns ture if operation is successful
      */
     bool deleteOldQueries(input_query in);
     
     /**
      * @brief To check the status of in_query_vector whether empty or not 
      * 
-     * @return return ture if the in_query_vector is not empty 
+     * @return returns ture if the in_query_vector is not empty 
      */
     bool getInQueryVectorStatus();   
 };

@@ -85,7 +85,7 @@ public:
      *  query columns that will be used to map query columns with event
      *  arguments at the update event generation time.
      *  
-     *  @return Returns ture if there is successful get and extraction.
+     *  @return returns ture if there is successful get and extraction.
      */ 
     bool processQueriesVectors();
     
@@ -95,12 +95,12 @@ public:
      * 
      *  @param handle SignalHandler to track CTRL+C signal for lower level
      *  executing statements
-     *  @return return operation state
+     *  @return returns operation state
      */ 
     int trackResponseChangesAndSendResponseToMaster(SignalHandler *handle);
     
     /**    
-     *  @brief Returns true if broker Connection is alive.
+     *  @brief returns true if broker Connection is alive.
      *  It scans the outgoing_connection_established status;if disconnected is
      *  received then it raises disconnect flag. 
      * 
@@ -109,28 +109,28 @@ public:
     bool isConnectionAlive();
     
     /**    
-     *  @brief Returns QueryManager pointer 
+     *  @brief returns QueryManager pointer 
      *  
      *  QueryManger pointer is required to call ReinitializeVectors from main
      *  so that we may reInitialize vectors when connection is broken.
      * 
-     *  @returns qm pointer 
+     *  @return qm pointer 
      */ 
     BrokerQueryManager* getQueryManagerPointer();
     
     /**    
-     *  @brief Returns pollfd pointer 
+     *  @brief returns pollfd pointer 
      *  pollfd pointer is required to poll broker::message queue
      * 
-     *  @returns local ptpfd pointer 
+     *  @return local ptpfd pointer 
      */  
     pollfd* getPollfdPointer();
     
     /**    
-     *  @brief Returns broker::message_queue pointer 
+     *  @brief returns broker::message_queue pointer 
      *  broker::message_queue pointer is required to get broker::message
      * 
-     *  @returns local ptmq pointer 
+     *  @return local ptmq pointer 
      */  
     broker::message_queue* getMessageQueuePointer();
     
