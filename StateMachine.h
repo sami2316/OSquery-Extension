@@ -55,6 +55,39 @@
  */
 
 
+/*State Machine Table:
+N-S = Next State
+illegimate event action --> ignore them 
+Y-axis --> States
+X-axis --> Possible Events
+
+       |PARAM_READ_   |CONNECTION  |TOPIC_RECEIVED |HOST        |HOST	      |SIG	   |CONNECTION   |TIMER       |
+       |EVENT         |_ESTABLISHED|	           |_SUBSCRIBE  |_UNSUBSCRIBE |_KILL       |_BROKEN      |_EVENT      |
+       |	      |            |	           |            |	      |	           |	         |	      |
+-------|--------------|------------|---------------|------------|-------------|------------|-------------|------------|
+INIT   |pass control  |N-S--->WAIT_|illegitmate    |illegitimate|illegitmate  |free the    |free the     |stop-timer  |
+       |to connection |_FOR_TOPIC  |event	   |event       |event	      |resources   |resources    |	      |
+       |establishment |            |	           |            |	      |and exit    |N-S----->INIT|	      |
+       |	      |            |	           |            |	      |gracefully  |	         |	      |
+------ |--------------|------------|---------------|------------|-------------|------------|-------------|------------|
+WAIT   |illegitimate  |illegitimate|extract and    |send warning|send_warning |            |free the     |illegitimate|	
+_FOR   |event         |event       |process topic  |to Broside  |to Broside   |  --do--	   |resources	 |event       |
+_TOPIC |	      |            |N-S-->GET_AND_ |            |	      |	           |	         |            |
+       |	      |            |PROCESS_QUERIES|            |	      |	           |N-S----->INIT|stop-timer  |
+-------|--------------|------------|---------------|------------|-------------|------------|-------------|------------|
+GET    |illegitmate   |illegitmate |send warning   |add new     |delete given |            |free the     |track       |
+_AND_  |event         |event       |to Bro-side    |query to    |sql query    |  	   |resources	 |changes     |
+PROCESS|	      |            |	           |local vector|from local   |	 --do--    |	         |and send    |
+_QUER  |	      |            |	           |and process |vector and   |	           |N-S----->INIT|updates     |
+IES    |	      |            |	           |            |process      |	           |	         |to Broside  |
+-------|--------------|------------|---------------|------------|-------------|------------|-------------|------------|
+TERMI- |illegitimate  |illegitimate|illegitmate    |illegitimate|illegitimate |illegitimate|illegitimate |illegitimate|
+NATE   |event         |event	   |event	   |event	| event	      |event	   |event	 |event       |
+
+*/
+
+
+
 enum State {INIT, WAIT_FOR_TOPIC,GET_AND_PROCESS_QUERIES,TERMINATE};
 
 enum Event {TIMER_EVENT,CONNECTION_ESTABLISHED_EVENT,CONNECTION_BROKEN_EVENT, 
